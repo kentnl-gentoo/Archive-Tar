@@ -13,7 +13,7 @@ use vars qw[$DEBUG $error $VERSION $WARN $FOLLOW_SYMLINK $CHOWN $CHMOD
 $DEBUG              = 0;
 $WARN               = 1;
 $FOLLOW_SYMLINK     = 0;
-$VERSION            = "1.20";
+$VERSION            = "1.21";
 $CHOWN              = 1;
 $CHMOD              = 1;
 $DO_NOT_USE_PREFIX  = 0;
@@ -180,12 +180,13 @@ sub _get_handle {
     ### only default to ZLIB if we're not trying to /write/ to a handle ###
     if( ZLIB and $gzip || MODE_READ->( $mode ) ) {
         
-        ### IO::Zlib will Do The Right Thing, even when passed a plain file ###
+        ### IO::Zlib will Do The Right Thing, even when passed 
+        ### a plain file ###
         $fh = new IO::Zlib;
     
     } else {    
         if( $gzip ) {
-            $self->_error( qq[Compression not available - Install IO::Zlib!] );
+            $self->_error(qq[Compression not available - Install IO::Zlib!]);
             return;
         
         } else {
@@ -257,7 +258,14 @@ sub _read_tar {
         if( length $entry->type and ($entry->is_file || $entry->is_longlink) ) {
             
             if ( $entry->is_file && !$entry->validate ) {
-                $self->_error( $entry->name . qq[: checksum error] );
+                ### sometimes the chunk is rather fux0r3d and a whole 512
+                ### bytes ends p in the ->name area.
+                ### clean it up, if need be
+                my $name = $entry->name;
+                $name = substr($name, 0, 100) if length $name > 100;
+                $name =~ s/\n/ /g;
+            
+                $self->_error( $name . qq[: checksum error] );
                 next LOOP;
             }
             
@@ -270,9 +278,9 @@ sub _read_tar {
             ### this is because Compress::Zlib doesn't support it =/ 
             ### this reads in the whole data in one read() call.              
             if( $handle->read( $$data, $block ) < $block ) {
-                $self->_error( qq[Read error on tarfile ']. 
+                $self->_error( qq[Read error on tarfile (missing data) ']. 
                                     $entry->full_path ."' at offset $offset" );
-                return;
+                next;
             }
 
             ### throw away trailing garbage ###

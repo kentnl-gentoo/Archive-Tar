@@ -242,8 +242,16 @@ sub _new_from_file {
 
     my @items       = qw[mode uid gid size mtime];
     my %hash        = map { shift(@items), $_ } (lstat $path)[2,4,5,7,9];
-    $hash{size}     = 0 if $type == DIR;
+    
+    ### you *must* set size == 0 on symlinks, or the next entry will be
+    ### though of as the contents of the symlink, which is wrong.
+    ### this fixes bug #7937
+    $hash{size}     = 0 if ($type == DIR or $type == SYMLINK);
     $hash{mtime}    -= TIME_OFFSET;
+    
+    ### strip the high bits off the mode, which we don't need to store
+    $hash{mode}     = STRIP_MODE->( $hash{mode} );
+
 
     ### probably requires some file path munging here ... ###
     ### name and prefix are set later

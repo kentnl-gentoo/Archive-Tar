@@ -19,6 +19,16 @@ obviously can't.
 A snapshot of the latest development version of Archive::Tar may be 
 optained at: http://p4.elixus.org/snap/Archive-Tar.tar.gz
 
+* important changes in version 1.21 9/11/2004:
+
+This release holds only bugfixes.
+-   Make the size of symlinks be 0 in tar headers, so the next entry
+    is not interpreted as contents of the symlink (bug #7937)
+-   Strip high bits from the mode of the file, as they are stored 
+    differently in the tar header
+-   Make Archive::Tar be kinder to archives that contain garbage,
+    proceeding anyway as long as that's possible.
+
 * important changes in version 1.20 8/11/2004:
 
 This release holds mostly bugfixes, in the form of a rewrite of 

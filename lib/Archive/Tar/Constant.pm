@@ -10,7 +10,7 @@ BEGIN {
                 BLOCK_SIZE TAR_PAD TAR_END ON_UNIX BLOCK CAN_READLINK MAGIC 
                 TAR_VERSION UNAME GNAME CAN_CHOWN MODE CHECK_SUM UID GID 
                 GZIP_MAGIC_NUM MODE_READ LONGLINK LONGLINK_NAME PREFIX_LENGTH
-                LABEL NAME_LENGTH
+                LABEL NAME_LENGTH STRIP_MODE
             ];
 
     require Time::Local if $^O eq "MacOS";
@@ -49,6 +49,7 @@ use constant UID            => $>;
 use constant GID            => (split ' ', $) )[0];
 
 use constant MODE           => do { 0666 & (0777 & ~umask) };
+use constant STRIP_MODE     => sub { shift() & 0777 };
 use constant CHECK_SUM      => "      ";
 
 use constant UNPACK         => 'A100 A8 A8 A8 A12 A12 A8 A1 A100 A6 A2 A32 A32 A8 A8 A155 x12';

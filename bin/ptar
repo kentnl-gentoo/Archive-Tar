@@ -6,10 +6,13 @@ use Archive::Tar;
 use File::Find;
 
 my $opts = {};
-getopts('cvzthxf:', $opts) or die usage();
+getopts('dcvzthxf:', $opts) or die usage();
 
 ### show the help message ###
 die usage() if $opts->{h};
+
+### enable debugging (undocumented feature)
+local $Archive::Tar::DEBUG = 1 if $opts->{d};
 
 ### sanity checks ###
 unless ( 1 == grep { defined $opts->{$_} } qw[x t c] ) {
