@@ -1,3 +1,5 @@
+#!/usr/bin/perl -w
+
 package Archive::Tar;
 require 5.005_03;
 
@@ -5,7 +7,7 @@ use strict;
 use vars qw[$DEBUG $error $VERSION $WARN];
 $DEBUG      = 0;
 $WARN       = 1;
-$VERSION    = "0.99_02";
+$VERSION    = "0.99_03";
 
 use IO::File;
 use Cwd;
@@ -142,7 +144,7 @@ sub read {
     my $handle = $self->_get_handle($file, $gzip, READ_ONLY->($gzip) ) 
                     or return undef;
 
-    my $data = $self->_read_tar( $handle, $opts );
+    my $data = $self->_read_tar( $handle, $opts ) or return undef;
 
     $self->_data( $data );    
 
@@ -174,7 +176,7 @@ sub _get_handle {
     }
         
     unless( $fh->open( $file, $mode ) ) {
-        $self->_error( qq[Could not create filehandle: $!!] );
+        $self->_error( qq[Could not create filehandle for '$file': $!!] );
         return undef;
     }
     
@@ -196,7 +198,9 @@ sub _read_tar {
     my $tarfile = [ ];
     my $chunk;
     my $read = 0;
-        
+    my $real_name;  # to set the name of a file when we're encountering @longlink
+    my $data;
+         
     LOOP: 
     while( $handle->read( $chunk, HEAD ) ) {        
         
@@ -222,16 +226,24 @@ sub _read_tar {
             next;
         }
         
-        if( length $entry->type and $entry->type == FILE ) {
+        ### ignore labels:
+        ### http://www.gnu.org/manual/tar/html_node/tar_139.html
+        next if $entry->is_label;
+        
+        if( length $entry->type and ($entry->is_file || $entry->is_longlink) ) {
             
-            unless ( $entry->validate ) {
+            if ( $entry->is_file && !$entry->validate ) {
                 $self->_error( $entry->name . qq[: checksum error] );
                 next LOOP;
             }
+          
+            ### part II of the @LongLink munging -- need to do /after/
+            ### the checksum check.
+
             
             my $block = BLOCK_SIZE->( $entry->size );
 
-            my $data = $entry->get_content_by_ref;
+            $data = $entry->get_content_by_ref;
 #            while( $block ) {
 #                $handle->read( $data, $block ) or (
 #                    $self->_error( qq[Could not read block for ] . $entry->name ),
@@ -253,12 +265,26 @@ sub _read_tar {
 
             ### throw away trailing garbage ###
             substr ($$data, $entry->size) = "";
-
-            ### store the data of the file -- this may be too memory intensive ###
-            #$entry->data( $data );
-
-            $self->_extract_file( $entry ) if $extract;
         }
+        
+        
+        ### clean up of the entries.. posix tar /apparently/ has some
+        ### weird 'feature' that allows for filenames > 255 characters
+        ### they'll put a header in with as name '././@LongLink' and the
+        ### contents will be the name of the /next/ file in the archive
+        ### pretty crappy and kludgy if you ask me
+        
+        ### set the name for the next entry if this is a @LongLink;
+        ### this is one ugly hack =/ but needed for direct extraction
+        if( $entry->is_longlink ) {
+            $real_name = $data;
+            next;
+        } elsif ( defined $real_name ) {
+            $entry->name( $$real_name );
+            undef $real_name;      
+        }
+
+        $self->_extract_file( $entry ) if $extract && $entry->is_file;
         
         ### Guard against tarfiles with garbage at the end
 	    last LOOP if $entry->name eq ''; 
@@ -270,29 +296,11 @@ sub _read_tar {
             $count-- unless $entry->is_longlink || $entry->is_dir;    
             last LOOP unless $count;
         }
-    }
+    } continue {
+        undef $data;
+    }      
     
-    ### clean up of the entries.. posix tar /apparently/ has some
-    ### weird 'feature' that allows for filenames > 255 characters
-    ### they'll put a header in with as name '././@LongLink' and the
-    ### contents will be the name of the /next/ file in the archive
-    ### pretty crappy and kludgy if you ask me
-    my @return;
-    while( my $entry = shift @$tarfile ) {
-        
-        if( UNIVERSAL::isa($entry, 'Archive::Tar::File') and 
-            $entry->is_longlink 
-        ) {
-            my $real_entry = shift @$tarfile;
-            $real_entry->name( $entry->data );
-            push @return, $real_entry;        
-        
-        } else {
-            push @return, $entry;
-        }
-    }
-                  
-    return \@return;
+    return $tarfile;
 }    
 
 =head2 $tar->extract( [@filenames] )
@@ -315,8 +323,7 @@ Returns a list of filenames extracted.
 
 sub extract {
     my $self    = shift;
-    my @archive = $self->list_files;                
-    my @files   = @_ || @archive;
+    my @files   = @_ ? @_ : $self->list_files;
 
     unless( scalar @files ) {
         $self->_error( qq[No files found for ] . $self->_file );
@@ -325,8 +332,8 @@ sub extract {
     
     for my $file ( @files ) {
         for my $entry ( @{$self->_data} ) {
-        
             next unless $file eq $entry->name;
+    
             unless( $self->_extract_file( $entry ) ) {
                 $self->_error( qq[Could not extract '$file'] );
                 return undef;
@@ -343,7 +350,7 @@ sub _extract_file {
     my $cwd     = cwd();
     
                             ### splitpath takes a bool at the end to indicate that it's splitting a dir    
-    my ($vol,$dirs,$file)   = File::Spec::Unix->splitpath( $entry->name, $entry->type == DIR );
+    my ($vol,$dirs,$file)   = File::Spec::Unix->splitpath( $entry->name, $entry->is_dir );
     my @dirs                = File::Spec::Unix->splitdir( $dirs );
     my @cwd                 = File::Spec->splitpath( $cwd, 1 );
     my $dir                 = File::Spec->catdir(@cwd, @dirs);               
@@ -360,16 +367,16 @@ sub _extract_file {
     }
     
     ### we're done if we just needed to create a dir ###
-    return 1 if $entry->type == DIR;
+    return 1 if $entry->is_dir;
     
     my $full = File::Spec->catfile( $dir, $file );
     
-    if( $entry->type == UNKNOWN ) {
+    if( $entry->is_unknown ) {
         $self->_error( qq[Unknown file type for file '$full'] );
         return undef;
     }
     
-    if( length $entry->type && $entry->type == FILE ) {
+    if( length $entry->type && $entry->is_file ) {
         my $fh;
         open $fh, '>' . $full or (
             $self->_error( qq[Could not open file '$full': $!] ),
@@ -411,28 +418,28 @@ sub _make_special_file {
     
     my $err;
     
-    if( $entry->type == SYMLINK ) {
+    if( $entry->is_symlink ) {
         ON_UNIX && symlink( $entry->linkname, $file ) or 
             $err =  qq[Making symbolink link from '] . $entry->linkname .
                     qq[' to '$file' failed]; 
     
-    } elsif ( $entry->type == HARDLINK ) {
+    } elsif ( $entry->is_hardlink ) {
         ON_UNIX && link( $entry->linkname, $file ) or 
             $err =  qq[Making hard link from '] . $entry->linkname .
                     qq[' to '$file' failed];     
     
-    } elsif ( $entry->type == FIFO ) {
+    } elsif ( $entry->is_fifo ) {
         ON_UNIX && !system('mknod', $file, 'p') or 
             $err = qq[Making fifo ']. $entry->name .qq[' failed];
  
-    } elsif ( $entry->type == BLOCKDEV or $entry->type == CHARDEV ) {
-        my $mode = $entry->type == BLOCKDEV ? 'b' : 'c';
+    } elsif ( $entry->is_blockdev or $entry->is_chardev ) {
+        my $mode = $entry->is_blockdev ? 'b' : 'c';
             
         ON_UNIX && !system('mknod', $file, $mode, $entry->devmajor, $entry->devminor ) or
             $err =  qq[Making block device ']. $entry->name .qq[' (maj=] .
                     $entry->devmajor . qq[ min=] . $entry->devminor .qq[) failed.];          
  
-    } elsif ( $entry->type == SOCKET ) {
+    } elsif ( $entry->is_socket ) {
         ### the original doesn't do anything special for sockets.... ###     
         1;
     }
@@ -564,7 +571,8 @@ sub rename {
 =head2 $tar->remove (@filenamelist)
 
 Removes any entries with names matching any of the given filenames
-from the in-memory archive. 
+from the in-memory archive. Returns a list of C<Archive::Tar::File>
+objects that remain. 
 
 =cut
 
@@ -579,6 +587,24 @@ sub remove {
     
     return values %seen;   
 }
+
+=head2 $tar->clear
+
+C<clear> clears the current in-memory archive. This effectively gives
+you a 'blank' object, ready to be filled again. Note that C<clear> 
+only has effect on the object, not the underlying tarfile.
+
+=cut
+
+sub clear {
+    my $self = shift or return undef;
+    
+    $self->_data( [] );
+    $self->_file( '' );
+    
+    return 1;
+}    
+
 
 =head2 $tar->write ( [$file, $compressed, $prefix] )
 
@@ -617,8 +643,9 @@ sub write {
     
         ### names are too long, and will get truncated if we don't add a
         ### '@LongLink' file...
-        if( $entry->name > NAME_LENGTH or $entry->prefix > PREFIX_LENGTH ) {
-            
+        if( length($entry->name)    > NAME_LENGTH or 
+            length($entry->prefix)  > PREFIX_LENGTH 
+        ) {
             
             my $longlink = Archive::Tar::File->new( 
                             data => LONGLINK_NAME, 
@@ -691,10 +718,12 @@ sub _format_tar_entry {
 
     my $file    = $entry->name;
     my $prefix  = $entry->prefix || '';
+    my $match   = quotemeta $prefix;
     
     ### remove the prefix from the file name ###
-    if( length $entry->prefix ) {
-        $file =~ s/^$prefix//;
+    ### not sure if this is still neeeded --kane ###
+    if( length $prefix ) {
+        $file =~ s/^$match//;
     } 
     
     $prefix = File::Spec::Unix->catdir($ext_prefix, $prefix) if length $ext_prefix;
@@ -845,7 +874,7 @@ method call instead.
 
 =head1 Class Methods 
 
-=head2 Archive::Tar->create_archive ($file, $compression, @filelist)
+=head2 Archive::Tar->create_archive($file, $compression, @filelist)
 
 Creates a tar file from the list of files provided.  The first
 argument can either be the name of the tar file to create or a
@@ -1011,8 +1040,8 @@ Jos Boumans E<lt>kane@cpan.orgE<gt>.
 
 =head1 ACKNOWLEDGEMENTS
 
-Thanks to Sean Burke, Chris Nandor and Chip Salzenberg for their help
-and suggestions.
+Thanks to Sean Burke, Chris Nandor, Chip Salzenberg and Tim Heaney 
+for their help and suggestions.
 
 =head1 COPYRIGHT
 

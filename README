@@ -16,6 +16,21 @@ Archive::Tar will still work without IO::Zlib, it will just complain
 when you try to use a compressed archive or write on, since it 
 obviously can't. 
 
+* important changes in version 0.99_03 28/4/2003:
+
+This release only has bug fixes on 0.99_02.
+
+Fixed handling of long file names when extracting with 
+C<extract_archive>
+
+Fixed handling of prefixes in tar headers that contain regex meta-
+characters.
+
+Fixed a few spurious warnings about comparing non-numbers.
+
+Expanded the test cases accordingly.
+
+
 * important changes in version 0.99_02 26/3/2003:
 
 Added options to be passed to read, namely:

@@ -186,22 +186,29 @@ sub _new_from_chunk {
 
     $obj->type(DIR) if ( ($obj->type == FILE) && ($obj->name =~ m|/$|) );    
 
+    ### weird thing in tarfiles -- if the file is actually a @LongLink,
+    ### the data part seems to have a trailing ^@ (unprintable) char.
+    ### to display, pipe output through less.
+    ### at any rate, we better remove that character here, or tests like
+    ### 'eq' and hashlook ups bases on names will SO not work
+    $obj->size( $obj->size - 1 ) if $obj->is_longlink;
+             
     return $obj;
 }
 
 sub _new_from_file {
     my $class       = shift;
     my $path        = shift or return undef;
-    
+
     my $fh;
     open $fh, "$path" or return undef;
     
     my ($prefix,$file) = $class->_prefix_and_file($path);
-        
+
     my @items       = qw[mode uid gid size mtime];
-    my %hash        = map { shift @items, $_ } (lstat $file)[2,4,5,7,9];
+    my %hash        = map { shift(@items), $_ } (lstat $path)[2,4,5,7,9];
     $hash{mtime}    -= TIME_OFFSET;
-    
+
     my $type        = __PACKAGE__->_filetype($path);
     
     ### probably requires some file path munging here ... ###
@@ -218,7 +225,7 @@ sub _new_from_file {
         devmajor    => 0,   # not handled
         devminor    => 0,   # not handled
         prefix      => $prefix,
-        data        => do { local $/; <$fh> },
+        data        => scalar do { local $/; <$fh> },
     };      
 
     close $fh;
@@ -441,6 +448,11 @@ Returns true if the file is of type C<socket>
 Returns true if the file is of type C<LongLink>. 
 Should not happen after a succesful C<read>.
 
+=item is_label
+
+Returns true if the file is of type C<Label>.
+Should not happen after a succesful C<read>.
+
 =item is_unknown
 
 Returns true if the file type is C<unknown>
@@ -449,15 +461,16 @@ Returns true if the file type is C<unknown>
 
 =cut
 
-sub is_file     { FILE     == $_[0]->type }
-sub is_dir      { DIR      == $_[0]->type }
-sub is_hardlink { HARDLINK == $_[0]->type }
-sub is_symlink  { SYMLINK  == $_[0]->type }
-sub is_chardev  { CHARDEV  == $_[0]->type }
-sub is_blockdev { BLOCKDEV == $_[0]->type }
-sub is_fifo     { FIFO     == $_[0]->type }
-sub is_socket   { SOCKET   == $_[0]->type }
-sub is_unknown  { UNKNOWN  == $_[0]->type } 
-sub is_longlink { LONGLINK eq $_[0]->type }
+sub is_file     { FILE      == $_[0]->type }
+sub is_dir      { DIR       == $_[0]->type }
+sub is_hardlink { HARDLINK  == $_[0]->type }
+sub is_symlink  { SYMLINK   == $_[0]->type }
+sub is_chardev  { CHARDEV   == $_[0]->type }
+sub is_blockdev { BLOCKDEV  == $_[0]->type }
+sub is_fifo     { FIFO      == $_[0]->type }
+sub is_socket   { SOCKET    == $_[0]->type }
+sub is_unknown  { UNKNOWN   == $_[0]->type } 
+sub is_longlink { LONGLINK  eq $_[0]->type }
+sub is_label    { LABEL     eq $_[0]->type }
 
 1;

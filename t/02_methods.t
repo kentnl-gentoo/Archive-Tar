@@ -1,22 +1,27 @@
-use Test::More tests => 53;
+use Test::More tests => 69;
 use strict;
 use File::Spec ();
+use File::Path;
 use Archive::Tar;
 use File::Basename ();
     
 my $tar = new Archive::Tar;
 isa_ok( $tar, 'Archive::Tar', 'Object created' );
 
+my $file = qq[directory/really-really-really-really-really-really-really-really-really-really-really-really-really-really-really-really-really-really-really-really-really-really-really-really-really-really-really-really-long-directory-name/myfile];
+
 my $expect = {
-    c   => qr/^iiiiiiiiiiii\s*$/,
-    d   => qr/^uuuuuuuu\s*$/,
+    c       => qr/^iiiiiiiiiiii\s*$/,
+    d       => qr/^uuuuuuuu\s*$/,
+    $file   => qr/^hello\s*$/,
 };
 
 my @root = grep { length } File::Basename::dirname($0), 'src';
 
 my $archive     = File::Spec->catfile( @root, 'bar.tar' );
 my $compressed  = File::Spec->catfile( @root, 'foo.tgz' );  
-my $zlib    = eval { require IO::Zlib; 1 };
+my $zlib        = eval { require IO::Zlib; 1 };
+my $NO_UNLINK   = scalar @ARGV ? 1 : 0;
 
 my $gzip = 0;
 for my $type( $archive, $compressed ) {    
@@ -30,23 +35,27 @@ for my $type( $archive, $compressed ) {
         ) if( $gzip and !$zlib);
 
         {
-            my $cnt = $tar->read( $type );
-
+            my @list    = $tar->read( $type );
+            my $cnt     = scalar @list;
+            
             ok( $cnt,                       "Reading $state file using 'read()'" );
-            is( $cnt, scalar keys %$expect, "   All files accounted for" );
+            is( $cnt, scalar get_expect(),  "   All files accounted for" );
 
-            for my $file ( keys %$expect ) {
-                like( $tar->get_content($file), $expect->{$file},
+            for my $file ( @list ) {
+                next unless $file->is_file;
+                like( $tar->get_content($file->name), $expect->{$file->name},
                         "   Content OK" ); 
             }
         } 
 
-        {
-            my @files = Archive::Tar->list_archive( $archive );                  
-            ok( scalar @files,                          "Reading $state file using 'list_archive()'" );
-            is( scalar @files, scalar keys %$expect,    "   All files accounted for" );
+        {   my @list    = Archive::Tar->list_archive( $archive ); 
+            my $cnt     = scalar @list;
+            
+            ok( $cnt,                          "Reading $state file using 'list_archive()'" );
+            is( $cnt, scalar get_expect(),      "   All files accounted for" );
 
-            for my $file ( @files ) {
+            for my $file ( @list ) {
+                next if is_dir( $file ); # directories
                 ok( $expect->{$file},   "   Found expected file" );
             }
         }         
@@ -56,10 +65,11 @@ for my $type( $archive, $compressed ) {
 }
 
 {
-    my $add = File::Spec->catfile( @root, 'b' );
+    
+    my @add = map { File::Spec->catfile( @root, @$_ ) } ['b'];
 
-    my @files = $tar->add_files( $add );
-    is( scalar @files, 1,                               "Adding file");
+    my @files = $tar->add_files( @add );
+    is( scalar @files, scalar @add,                     "Adding files");
     is( $files[0]->name, 'b',                           "   Proper name" );
     is( $files[0]->is_file, 1,                          "   Proper type" );
     like( $files[0]->get_content, qr/^bbbbbbbbbbb\s*$/, "   Content OK" );
@@ -67,6 +77,7 @@ for my $type( $archive, $compressed ) {
 
 {
     my @to_add = ( 'a', 'aaaaa' );
+    
     my $obj = $tar->add_data( @to_add );
     ok( $obj,                                       "Adding data" );
     is( $obj->name, $to_add[0],                     "   Proper name" );
@@ -80,11 +91,13 @@ for my $type( $archive, $compressed ) {
 }
 
 {
-    my @files = ('b', 'e');
+    my @files   = ('b', 'e');
+    my $left    = $tar->remove( @files );
+    my $cnt     = $tar->list_files;
+    my $files   = grep { $_->is_file } $tar->get_files;
     
-    my $cnt = $tar->remove( @files );
-    is( $cnt, scalar @files,                            "Removing files" );
-    is( scalar $tar->list_files, scalar keys %$expect,  "   Proper files remaining" );
+    is( $left, $cnt,                    "Removing files" );
+    is( $files, scalar keys %$expect,     "   Proper files remaining" );
 } 
 
 {
@@ -92,12 +105,12 @@ for my $type( $archive, $compressed ) {
 
     ok( $tar->write($out),  "Writing tarfile using 'write()'" );
     ok( -s $out,            "   File written" );
-    unlink $out;
+    rm( $out ) unless $NO_UNLINK;
     
     ok( Archive::Tar->create_archive( $out, 0, $0 ),  
         "Writing tarfile using 'create_archive()'" );
     ok( -s $out, "   File written" );
-    unlink $out;
+    rm( $out ) unless $NO_UNLINK;
     
     SKIP: {
         skip( "No IO::Zlib - can not write compressed archives", 4 ) unless $zlib;
@@ -105,39 +118,45 @@ for my $type( $archive, $compressed ) {
 
         ok($tar->write($outgz),    "Writing compressed file using 'write()'" );    
         ok( -s $outgz,             "   File written" );
-        unlink $outgz;
+        rm( $outgz ) unless $NO_UNLINK;
         
         ok( Archive::Tar->create_archive( $outgz, 1, $0 ),  
             "Writing compressed file using 'create_archive()'" );
         ok( -s $outgz, "   File written" );
-        unlink $outgz;
+        rm( $outgz ) unless $NO_UNLINK;
     }
 }
  
 {
     {
-        my @files = $tar->extract();                    
-        is( scalar(@files), 2,   "Extracting files using 'extract()'" );
+        my @list = $tar->list_files;
+        my $expect = get_expect();        
+        is( $expect, scalar @list,  "Found expected files" );
+        
+        my @files = grep { -e $_  } $tar->extract();          
+        is( $expect, scalar(@files),   "Extracting files using 'extract()'" );
         _check_files( @files );
     }
     {
     
         my @files = Archive::Tar->extract_archive( $archive );       
-        is( scalar @files, 2,   "Extracting files using 'extract_archive()'" );
+        is( scalar get_expect(), scalar @files,   "Extracting files using 'extract_archive()'" );
         _check_files( @files );
     }
         
     sub _check_files {
         my @files = @_;
         for my $file ( @files ) {
-            ok( $expect->{$file},                           "   Expected file found" );
+            next if is_dir( $file );
         
+            ok( $expect->{$file},                                "   Expected file found" );
+            
             my $fh; open( $fh, "$file" ) or warn "Error opening file: $!\n";
-            ok( $fh,                                        "   Opening file" );
-            like( do {local $/; <$fh>}, $expect->{$file},   "   Contents OK" );
+            ok( $fh,                                            "   Opening file" );
+            like( scalar do{local $/;<$fh>}, $expect->{$file},  "   Contents OK" );
         }
     
-        unlink $_ for @files;
+         unless( $NO_UNLINK ) { rm($_) for @files }
     }
 }    
 
@@ -146,3 +165,25 @@ for my $type( $archive, $compressed ) {
     is( scalar @files, 1,                               "Limited read" );
     is( (shift @files)->name, (sort keys %$expect)[0],  "   Expected file found" );
 }     
+
+{   
+    my $cnt = $tar->list_files();
+    ok( $cnt,           "Found old data" );
+    ok( $tar->clear,    "   Clearing old data" );
+    
+    my $new_cnt = $tar->list_files;
+    ok( !$new_cnt,      "   Old data cleared" );
+}    
+
+sub get_expect {
+    return map { split '/' } keys %$expect;
+}    
+
+sub is_dir {
+    return $_[0] =~ m|/$| ? 1 : 0;
+}
+
+sub rm {
+    my $x = shift;
+    is_dir( $x ) ? rmtree($x) : unlink $x;
+}    
