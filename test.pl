@@ -18,27 +18,28 @@ print "ok 1\n";
 # (correspondingly "not ok 13") depending on the success of chunk 13
 # of the test code):
 
-use IO::File;
-
 my $t1 = Archive::Tar->new ();
-my @files = IO::File->new ("MANIFEST")->getlines ();
+open TT, "MANIFEST";
+my @files = <TT>;
+close TT;
 chomp @files;
-my $data1 = join '', IO::File->new ("test.pl")->getlines ();
+undef $/;
+open TT, "test.pl";
+my $data1 = <TT>;
+close TT;
 print $t1->add_files (@files) 
     ? "ok 2\n" : "not ok 2\n";
 print $t1->add_data ('x' . $files[$#files], $data1)
     ? "ok 3\n" : "not ok 3\n";
-print $t1->write ("dummy.tar") 
-    ? "ok 4\n" : "not ok 3\n";
+print $t1->write ("dummy.tar", 9) || $t1->write ("dummy.tar")
+    ? "ok 4\n" : "not ok 4\n";
 undef $t1;
 
-package TEST;
+package MyTest;
 
 @ISA = qw (Archive::Tar);
-my $t2 = __PACKAGE__->new ();
-$t2->read ("dummy.tar");
+my $t2 = MyTest->new ("dummy.tar");
 my $data2 = $t2->get_content ('x' . $files[$#files]);
 print $data1 eq $data2 ? "ok 5\n" : "not ok 5\n";
-unlink ("dummy.tar");
 
 1;

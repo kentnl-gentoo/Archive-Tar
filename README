@@ -1,7 +1,37 @@
 This is the README file for Archive::Tar, the Perl module for creation
 and manipulation of tar files.
 
-* changelog for version 0.08
+* Installation
+
+Archive::Tar uses the standard perl module install process
+
+perl Makefile.PL
+make
+make test (optional but recommended)
+make install
+
+This module uses no C-coded parts in itself, but it will try to use
+the Compress::Zlib module to read and write gzipped tarfiles.
+Archive::Tar will still work without Zlib, it will just complain a
+little bit (and, of course, not be able to use compression). The
+complaining will be removed when the module leaves the alpha stage,
+and can be trivially removed by commenting out the offending print
+near the top of Tar.pm.
+
+* important changes in version 0.20:
+
+New class methods create_archive, extract_archive & list_archive.
+
+Archive::Tar no longer keeps the entire archive in memory after
+reading it.  This results in a major reduction in memory consumption.
+
+Added suport for character & block special files.  These files are
+currently created using mknod, so they will only be available on UNIX
+platforms.
+
+See the file ChangeLog for more complete details.
+
+* important changes for version 0.08
 
 Fixed (again) the MacOS support and included alpha support for
 block/character special files as well as improving symlink handling.
@@ -10,7 +40,7 @@ NOTE: Archive::Tar is undergoing major work to extend the interface
 and lower memory consumpton.  Any changes to the existing interface
 should be extensions only.
 
-* changelog for version 0.072.
+* important changes for version 0.072.
 
 Fixes a problem with systems that don't like open files being deleted.
 It also has an explicit copyright notice so folks like Debian can
@@ -19,7 +49,7 @@ Calle's suffering Carpal Tunnel Syndrome.
 
 Get better soon, Calle!
 
-* changelog for version 0.071
+* important changes for version 0.071
 
 It fixes a bunch of bugs, implements POSIX-style long pathnames and
 adds a couple of useful methods.  It has also been verified to work on
@@ -33,16 +63,9 @@ Unless something really strange and terrible shows up, this will be
 the last alpha-test version, and the next release will be beta-test
 and v0.50 or something like that.
 
-This module uses no C-coded parts in itself, but it will try to use
-the Compress::Zlib module to read and write gzipped tarfiles.
-Archive::Tar will still work without Zlib, it will just complain a
-little bit (and, of course, not be able to use compression). The
-complaining will be removed when the module leaves the alpha stage,
-and can be trivially removed by commenting out the offending print
-near the top of Tar.pm.
-
-If you use this module at all, please mail me (calle@lysator.liu.se)
-and tell me what you think of it.
+If you use this module at all, please mail Calle
+<calle@lysator.liu.se> or Stephen <gibreel@pobox.com> and tell us what
+you think of it.
 
 Calle Dybedahl,
 33 Aftermath, 3163 (mundanely known as 21 November 1997)
@@ -51,5 +74,5 @@ Gurusamy "stand-in maintainer" Sarathy,
 -697 Millennium, 2 (mundanely known as  1 February 1998)
 
 Stephen Zander (new custodial maintainer)
-Day 100, Year 89 of Our Ford (mundanely known as 10 April 1998)
+Day 9, Year 90 of Our Ford (mundanely known as 9 January 1999)
 

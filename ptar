@@ -1,18 +1,19 @@
 #!/usr/bin/perl -w
 
+use strict;
 use Archive::Tar;
 use File::Find;
 
-$switches = shift @ARGV;
-$tarfile = "./default.tar";
-$create=0;
-$list=0;
-$extract=0;
-$debug=0;
+my $switches = shift @ARGV;
+my $tarfile = "./default.tar";
+my $create = 0;
+my $list = 0;
+my $extract = 0;
+my $debug = 0;
 
 if (!$switches) {
     print<<EOF;
-usage: tar [xct][v][f][z] [archive_file] [files...]
+usage: ptar [xct][v][f][z] [archive_file] [files...]
     x    Extract from archive_file
     c    Make archive_file from files
     t    Print contents of archive_file
@@ -58,20 +59,17 @@ if ($extract+$list+$create>1) {
 }
 
 if ($list) {
-    $arc = Archive::Tar->new($tarfile,$compress);
-    print join "\n", $arc->list_files,"";
+    print join "\n", Archive::Tar->list_archive ($tarfile),"";
 }
 
 if ($extract) {
-    $arc = Archive::Tar->new($tarfile,$compress);
-    $arc->extract($arc->list_files);
+    Archive::Tar->extract_archive ($tarfile);
 }
 
 if ($create) {
     my @f;
     
-    $arc = Archive::Tar->new();
-    finddepth(sub {push @f,$File::Find::name; print $File::Find::name,"\n" if $verbose},@ARGV);
-    $arc->add_files(@f);
-    $arc->write($tarfile,$compress);
+    finddepth(sub {push @f,$File::Find::name;
+		   print $File::Find::name,"\n" if $verbose},@ARGV);
+    Archive::Tar->create_archive ($tarfile, $compress, @f);
 }
