@@ -6,6 +6,9 @@ lib/Archive/Tar/Constant.pm
 lib/Archive/Tar/File.pm
 t/01_use.t
 t/02_methods.t
-t/src/bar.tar
-t/src/foo.tgz
-t/src/b
+t/src/long/bar.tar
+t/src/long/foo.tgz
+t/src/long/b
+t/src/short/bar.tar
+t/src/short/foo.tgz
+t/src/short/b

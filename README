@@ -16,7 +16,12 @@ Archive::Tar will still work without IO::Zlib, it will just complain
 when you try to use a compressed archive or write on, since it 
 obviously can't. 
 
-* important changes in version 0.99_03 28/4/2003:
+* important changes in version 0.99_05 30/4/2003:
+
+Apparently windows has some issues with long path names.
+This version introduces an adapted test suite for Win32 machines.
+
+* important changes in version 0.99_04 28/4/2003:
 
 Make Archive::Tar work happily on perl 5.005_03
 
