@@ -1,48 +1,43 @@
 package Archive::Tar;
 
 use strict;
+use vars qw($VERSION);
+$VERSION = 0.08;
+
 use Carp;
 use Cwd;
 use File::Basename;
+require Time::Local if $^O eq "MacOS";
 
-BEGIN {
-    # This bit is straight from the manpages
-    use Exporter ();
-    use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $symlinks $compression $has_getpwuid $has_getgrgid);
-
-    $VERSION = 0.072;
-    @ISA = qw(Exporter);
-    @EXPORT = qw ();
-    %EXPORT_TAGS = ();
-    @EXPORT_OK = ();
-
-    # The following bit is not straight from the manpages
-    # Check if symbolic links are available
-    $symlinks = 1;
-    eval { $_ = readlink $0; };	# Pointless assigment to make -w shut up
-    if ($@) {
-	warn "Symbolic links not available.\n";
-	$symlinks = undef;
-    }
-    # Check if Compress::Zlib is available
-    $compression = 1;
-    eval {require Compress::Zlib;};
-    if ($@) {
-	warn "Compression not available.\n";
-	$compression = undef;
-    }
-    # Check for get* (they don't exist on WinNT)
-    eval {$_=getpwuid(0)}; # Pointless assigment to make -w shut up
-    $has_getpwuid = !$@;
-    eval {$_=getgrgid(0)}; # Pointless assigment to make -w shut up
-    $has_getgrgid = !$@;
+# The following bit is not straight from the manpages
+# Check if symbolic links are available
+my $symlinks = 1;
+eval { $_ = readlink $0; };	# Pointless assigment to make -w shut up
+if ($@) {
+    warn "Symbolic links not available.\n";
+    $symlinks = undef;
 }
 
-use vars qw(@EXPORT_OK $tar_unpack_header $tar_header_length $error);
+# Check if Compress::Zlib is available
+my $compression = 1;
+#eval {require Compress::Zlib;};
+eval {die;};
+if ($@) {
+    warn "Compression not available.\n";
+    $compression = undef;
+}
 
-$tar_unpack_header 
+# Check for get* (they don't exist on WinNT)
+eval {$_=getpwuid(0)}; # Pointless assigment to make -w shut up
+my $has_getpwuid = !$@;
+eval {$_=getgrgid(0)}; # Pointless assigment to make -w shut up
+my $has_getgrgid = !$@;
+
+
+my $tar_unpack_header 
   ='A100 A8 A8 A8 A12 A12 A8 A1 A100 A6 A2 A32 A32 A8 A8 A155';
-$tar_header_length = 512;
+my $tar_header_length = 512;
+my $offset = ($^O eq "MacOS") ? Time::Local::timelocal(0,0,0,1,0,70) : 0;
 
 sub format_tar_entry;
 sub format_tar_file;
@@ -51,6 +46,7 @@ sub format_tar_file;
 ### Non-method functions
 ###
 
+my $error;
 sub drat {$error=$!;return undef}
 
 sub read_tar {
@@ -329,17 +325,22 @@ sub add_files {
     my ($self) = shift;
     my (@files) = @_;
     my $file;
-    my ($mode,$uid,$gid,$rdev,$size,$mtime,$data,$typeflag,$linkname);
+    my ($mode,$nlnk,$uid,$gid,$rdev,$size,$mtime,$data,$typeflag,$linkname);
     my $counter = 0;
     local ($/);
     
     undef $/;
     foreach $file (@files) {
-	if ((undef,undef,$mode,undef,$uid,$gid,$rdev,$size,
-	     undef,$mtime,undef,undef,undef) = stat($file)) {
+	if ((undef,undef,$mode,$nlnk,$uid,$gid,$rdev,$size,
+	     undef,$mtime,undef,undef,undef) = lstat($file)) {
 	    $data = "";
 	    $linkname = "";
-	    if (-f $file) {	# Plain file
+
+	    if (-l $file) {	# Symlink
+		$typeflag = 2;
+		$linkname = readlink $file if $symlinks;
+	    }
+	    elsif (-f $file) {	# Plain file
 		$typeflag = 0;
 		unless (open(FILE,$file)) {
 		    next;	# Can't open file, for some reason. Try next one.
@@ -348,10 +349,6 @@ sub add_files {
 		$data = <FILE>;
 		$data = "" unless defined $data;
 		close FILE;
-	    }
-	    elsif (-l $file) {	# Symlink
-		$typeflag = 1;
-		$linkname = readlink $file if $symlinks;
 	    }
 	    elsif (-d $file) {	# Directory
 		$typeflag = 5;
@@ -371,13 +368,17 @@ sub add_files {
 	    else {		# Something else (like what?)
 		$typeflag = 9;	# Also bogus value.
 	    }
+	    if($^O eq "MacOS") {
+		$file = _munge_file($file);
+	    }
+
 	    push(@{$self->{'_data'}},{
 				      name => $file,		    
 				      mode => $mode,
 				      uid => $uid,
 				      gid => $gid,
 				      size => length $data,
-				      mtime => $mtime,
+				      mtime => (($mtime - $offset) | 0),
 				      chksum => "      ",
 				      typeflag => $typeflag, 
 				      linkname => $linkname,
@@ -445,13 +446,16 @@ sub add_data {
     my $ref = {};
     my ($key);
     
+    if($^O eq "MacOS") {
+	$file = _munge_file($file);
+    }
     $ref->{'data'}=$data;
     $ref->{name}=$file;
     $ref->{mode}=0666&(0777-umask);
     $ref->{uid}=$>;
     $ref->{gid}=(split(/ /,$)))[0]; # Yuck
     $ref->{size}=length $data;
-    $ref->{mtime}=time;
+    $ref->{mtime}=((time - $offset) | 0);
     $ref->{chksum}="      ";	# Utterly pointless
     $ref->{typeflag}=0;		# Ordinary file
     $ref->{linkname}="";
@@ -488,8 +492,14 @@ sub extract {
 		# Which they *are*, according to the tar format spec!
 		(@path) = split(/\//,$file);
 		$file = pop @path;
+		$file =~ s,:,/,g if $^O eq "MacOS";
 		$current = cwd;
 		foreach (@path) {
+		    if($^O eq "MacOS") {
+			$_ =~ s,:,/,g;
+			$_ = "::" if $_ eq "..";
+			$_ = ":" if $_ eq ".";
+		    }
 		    if (-e $_ && ! -d $_) {
 			warn "$_ exists but is not a directory!\n";
 			next;
@@ -509,19 +519,24 @@ sub extract {
 		    }
 		    mkdir $file,0777 unless -d $file;
 		}
-		elsif ($_->{typeflag}==1) {
+		elsif ($_->{typeflag}==2) {
 		    symlink $_->{linkname},$file if $symlinks;
 		}
+		elsif ($_->{typeflag}==1) {
+		    link $_->{linkname},$file || warn "Hard linking $_->{linkname} to $file, failed.\n";
+		}
 		elsif ($_->{typeflag}==6) {
-		    warn "Doesn't handle named pipes (yet).\n";
+		    system("mknod","$file","p") || warn "Making fifo $file, failed.\n";
 		    return 1;
 		}
 		elsif ($_->{typeflag}==4) {
-		    warn "Doesn't handle device files (yet).\n";
-		    return 1;
+		    system("mknod","$file","b",$_->{devmajor},$_->{devminor}) ||
+			 warn "Making block device $file (maj=$_->{devmajor},min=$_->{devminor}), failed.\n";
+			return 1;
 		}
 		elsif ($_->{typeflag}==3) {
-		    warn "Doesn't handle device files (yet).\n";
+		    system("mknod","$file","c",$_->{devmajor},$_->{devminor}) ||
+			 warn "Making block device $file (maj=$_->{devmajor},min=$_->{devminor}), failed.\n";
 		    return 1;
 		}
 		else {
@@ -530,7 +545,7 @@ sub extract {
 		}
 		utime time, $_->{mtime}, $file;
 		# We are root, and chown exists
-		if ($>==0 and $ ne "MacOS" and $ ne "MSWin32") {
+		if ($>==0 and $^O ne "MacOS" and $^O ne "MSWin32") {
 		    chown $_->{uid},$_->{gid},$file;
 		}
 		# chmod is done last, in case it makes file readonly
@@ -549,6 +564,49 @@ sub list_files {
     return map {$_->{name}} @{$self->{'_data'}};
 }
 
+if($^O eq "MacOS") {
+    sub _munge_file {
+#
+#  Mac path to the Unix like equivalent to be used in tar archives
+#
+	my $inpath = $_[0];
+#
+#  If there are no :'s in the name at all, assume it's a single item in the
+#  current directory.  Return it, changing any / in the name into :
+#
+	if($inpath !~ m,:,) {
+	    $inpath =~ s,/,:,g;
+	    return $inpath;
+	}
+#
+#  If we now split on :, there will be just as many nulls in the list as
+#  there should be up requests, except if it begins with a :, where there
+#  will be one extra.
+#
+	my @names = split(/:/,$inpath);
+	shift(@names) unless $names[0];
+	my @outname = ();
+#
+#  Work from the end.
+#
+	my $i;
+	for($i = $#names; $i >= 0;$i--) {
+	    if ($names[$i] eq "") {
+			unshift(@outname,"..");
+	    } else {
+			$names[$i] =~ s,/,:,g;
+			unshift(@outname,$names[$i]);
+	    }
+	}
+	my $netpath = join("/",@outname);
+	$netpath = $netpath . "/" if($inpath =~ /:$/);
+	if($inpath !~ m,^:,) {
+	    return "/".$netpath;
+	} else {
+	    return $netpath;
+	}
+    }
+}
 
 ### Standard end of module :-)
 1;
@@ -584,16 +642,23 @@ attempt to read it using L<Compress::Zlib>.
 
 =item C<add_files(@filenamelist)>
 
-Takes a list of filenames and adds them to the in-memory archive. 
-I suspect that this function will produce bogus tar archives when 
-used under MacOS, but I'm not sure and I have no Mac to test it on.
+Takes a list of filenames and adds them to the in-memory archive.  On
+MacOS, the path to the file is automatically converted to a Unix like
+equivalent for use in the archive, and the file's modification time is
+converted from the MacOS to the Unix zero of time.  So tar archives
+created on MacOS with B<Archive::Tar> can be read both with I<tar> on
+Unix and applications like I<suntar> or I<Stuffit Expander> on MacOS.
+Also be aware that the file's type/creator and resource fork will be
+lost, which is usually what you want in cross-platform archives.
 
 =item C<add_data($filename,$data,$opthashref)>
 
 Takes a filename, a scalar full of data and optionally a reference to
 a hash with specific options. Will add a file to the in-memory
 archive, with name C<$filename> and content C<$data>. Specific options
-can be set using C<$opthashref>, which will be documented later.
+can be set using C<$opthashref>, which will be documented later.  (On
+MacOS, the file's path and modification times are converted to Unix
+equivalents.)
 
 =item C<remove(@filenamelist)>
 
@@ -614,6 +679,7 @@ useful if you'd like to stuff the archive into a socket or a pipe to
 gzip or something. If the second argument is true, the module will try
 to write the file compressed.
 
+
 =item C<data()>
 
 Returns the in-memory archive. This is a list of references to hashes,
@@ -623,7 +689,11 @@ the internals of which is not currently documented.
 
 Write files whose names are equivalent to any of the names in
 C<@filenames> to disk, creating subdirectories as neccesary. This
-might not work too well under VMS and MacOS.
+might not work too well under VMS.  Under MacPerl, the file's
+modification time will be converted to the MacOS zero of time, and
+appropriate conversions will be done to the path.  However, the length
+of each element of the path is not inspected to see whether it's
+longer than MacOS currently allows (32 characters).
 
 =item C<list_files()>
 
@@ -642,6 +712,14 @@ Make the string $content be the content for the file named $file.
 =head1 CHANGES
 
 =over 4
+
+=item Version 0.08
+
+New developer/maintainer.  Calle has carpal-tunnel syndrome and cannot
+type a great deal. Get better as soon as you can, Calle.
+
+Added proper support for MacOS.
+Thanks to Paul J. Schinder <schinder@leprss.gsfc.nasa.gov>.
 
 =item Version 0.071
 

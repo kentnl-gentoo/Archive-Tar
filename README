@@ -1,16 +1,29 @@
 This is the README file for Archive::Tar, the Perl module for creation
 and manipulation of tar files.
 
-This is version 0.072. It fixes a problem with systems that don't like
-open files being deleted.  It also has an explicit copyright notice
-so folks like Debian can redistribute it in peace, and an new
-custodial maintainer due to Calle's suffering Carpal Tunnel Syndrome.
+* changelog for version 0.08
+
+Fixed (again) the MacOS support and included alpha support for
+block/character special files as well as improving symlink handling.
+
+NOTE: Archive::Tar is undergoing major work to extend the interface
+and lower memory consumpton.  Any changes to the existing interface
+should be extensions only.
+
+* changelog for version 0.072.
+
+Fixes a problem with systems that don't like open files being deleted.
+It also has an explicit copyright notice so folks like Debian can
+redistribute it in peace, and an new custodial maintainer due to
+Calle's suffering Carpal Tunnel Syndrome.
 
 Get better soon, Calle!
 
-This is version 0.071. It fixes a bunch of bugs, implements POSIX-style
-long pathnames and adds a couple of useful methods.  It has also been
-verified to work on Win32.
+* changelog for version 0.071
+
+It fixes a bunch of bugs, implements POSIX-style long pathnames and
+adds a couple of useful methods.  It has also been verified to work on
+Win32.
 
 This version also includes a small tar-lookalike program, ptar. There
 is no documentation beyond a usage message, but if you've ever used at
