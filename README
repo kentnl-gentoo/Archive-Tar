@@ -1,6 +1,13 @@
 This is the README file for Archive::Tar, the Perl module for creation
 and manipulation of tar files.
 
+This is version 0.072. It fixes a problem with systems that don't like
+open files being deleted.  It also has an explicit copyright notice
+so folks like Debian can redistribute it in peace, and an new
+custodial maintainer due to Calle's suffering Carpal Tunnel Syndrome.
+
+Get better soon, Calle!
+
 This is version 0.071. It fixes a bunch of bugs, implements POSIX-style
 long pathnames and adds a couple of useful methods.  It has also been
 verified to work on Win32.
@@ -29,3 +36,7 @@ Calle Dybedahl,
 
 Gurusamy "stand-in maintainer" Sarathy,
 -697 Millennium, 2 (mundanely known as  1 February 1998)
+
+Stephen Zander (new custodial maintainer)
+Day 100, Year 89 of Our Ford (mundanely known as 10 April 1998)
+

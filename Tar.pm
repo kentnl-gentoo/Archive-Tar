@@ -10,7 +10,7 @@ BEGIN {
     use Exporter ();
     use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $symlinks $compression $has_getpwuid $has_getgrgid);
 
-    $VERSION = 0.071;
+    $VERSION = 0.072;
     @ISA = qw(Exporter);
     @EXPORT = qw ();
     %EXPORT_TAGS = ();
@@ -74,6 +74,7 @@ sub read_tar {
 	binmode TAR;
 	read(TAR,$head,$tar_header_length);
     }
+  READLOOP:
     while (length($head)==$tar_header_length) {
 	my ($name,		# string
 	    $mode,		# octal number
@@ -107,7 +108,7 @@ sub read_tar {
 	# so we ass_u_me a directory if the name ends in slash
 	$typeflag = 5 if $name =~ m|/$| and not $typeflag;
 	
-	return @tarfile if $head eq "\0" x 512;	# End of archive
+	last READLOOP if $head eq "\0" x 512;	# End of archive
 	# Apparently this should really be two blocks of 512 zeroes,
 	# but GNU tar sometimes gets it wrong. See comment in the
 	# source code (tar.c) to GNU cpio.
@@ -123,6 +124,7 @@ sub read_tar {
 	else {
 	    if (read(TAR,$data,$size)!=$size) {
 		$error = "Read error on tarfile.";
+		close TAR;
 		return undef;
 	    }
 	}
@@ -138,7 +140,7 @@ sub read_tar {
 	}
 	
 	# Guard against tarfiles with garbage at the end
-	return @tarfile if $name eq ''; 
+	last READLOOP if $name eq ''; 
 	
 	$tarfile[$i++]={
 			name => $name,		    
@@ -167,6 +169,7 @@ sub read_tar {
 	    read(TAR,$head,$tar_header_length);
 	}
     }
+    $compressed ? $compressed->gzclose() : close(TAR);
     return @tarfile;
 }
 
