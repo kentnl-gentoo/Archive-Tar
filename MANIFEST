@@ -1,9 +1,6 @@
 MANIFEST
-COPYRIGHT
 Makefile.PL
 README
-TODO
-ChangeLog
-Tar.pm
-ptar
-test.pl
+lib/Archive/Tar.pm
+bin/ptar
+t/01_Tar.t

@@ -18,6 +18,18 @@ complaining will be removed when the module leaves the alpha stage,
 and can be trivially removed by commenting out the offending print
 near the top of Tar.pm.
 
+* important changes in version 0.23, 21/1/2003:
+
+Bundled 0.072 and 0.22 to be able to work on Win32 and non-Win32
+platforms. Since the previous version is almost 3 years old, bundling
+seemed like the quickest way to get a working solution again.
+
+Archive::Tar now transparently Does The Right Thing depending what
+platform you are on -- Win32 users, read the Archive::Tar::Win32
+documentation!
+
+I also suppose this makes me the new maintainer...
+
 * important changes in version 0.20:
 
 New class methods create_archive, extract_archive & list_archive.
@@ -76,3 +88,5 @@ Gurusamy "stand-in maintainer" Sarathy,
 Stephen Zander (new custodial maintainer)
 Day 9, Year 90 of Our Ford (mundanely known as 9 January 1999)
 
+Jos Boumans (bundler),
+1043188048 (mundanely known as 21st of January 2003)
