@@ -87,7 +87,10 @@ for my $type( $archive, $compressed ) {
     is( $files[0]->name, 'b',                           "   Proper name" );
     is( $files[0]->is_file, 1,                          "   Proper type" );
     like( $files[0]->get_content, qr/^bbbbbbbbbbb\s*$/, "   Content OK" );
-
+    
+    for my $file ( @add ) {
+        ok( $tar->contains_file($file),                 "   File found in archive" );
+    }
 
     my $t2      = Archive::Tar->new;
     my @added   = $t2->add_files($0);

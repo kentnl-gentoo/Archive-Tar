@@ -16,6 +16,17 @@ Archive::Tar will still work without IO::Zlib, it will just complain
 when you try to use a compressed archive or write one, since it 
 obviously can't. 
 
+* important changes in version 1.06 15/10/2003:
+
+This release holds some bugfixes and new features over the 1.05 release.
+-   The chown() code somehow didn't make it into the 1.05 release
+-   Patch _get_handle() to treat all IO::File handles as binary.
+    This should make win32 users happy
+    
+New feature added:
+-   A method called 'contains_file' that will tell you if a certain file
+    is already in the archive.    
+
 * important changes in version 1.05 23/8/2003:
 
 This release holds some bugfixes and new features over the 1.04 release.
@@ -28,14 +39,14 @@ This release holds some bugfixes and new features over the 1.04 release.
 
 This release hold a bugfix over the 1.03 release:
 -   NULL-byte padding was done also on files that had no real content,
-    like symlinks, thus ending up with a number of bytes not devidable
+    like symlinks, thus ending up with a number of bytes not dividable
     by 512.
 
 * important changes in version 1.03 26/6/2003:
 
 This release holds some bugfixes over the 1.02 release, mainly these:
 -   Always do a readlink on the full path, never just the file
--   Make archive::tar write proper headers when dealing with symlinks
+-   Make Archive::Tar write proper headers when dealing with symlinks
     For this $Archive::Tar::FOLLOW_SYMLINKS is introduced
 
 * important changes in version 1.02 12/6/2003:
@@ -43,7 +54,7 @@ This release holds some bugfixes over the 1.02 release, mainly these:
 This release holds some bugfixes over the 1.01 release, mainly these:
 -   Silly thinko fix in File.pm
 -   Quell some warnings if files are empty
--   The cache of previously added files was not being emtpied
+-   The cache of previously added files was not being emptied
 
 Also, some new features are added:
 
@@ -57,7 +68,7 @@ This release holds some bugfixes over the 1.00 release, mainly these:
 -   A { } inside a map was interpreted as a block rather than a hashref 
     constructor -- now fixed.
 -   Fix write() to work again as advertised when passed no arguments.
--   This also means glob support to write is now definately not
+-   This also means glob support to write is now definitely not
     available.
 -   Silly thinko of where splitpath() instead of splitdir() was used.
 
@@ -70,7 +81,7 @@ Some new features/changes:
 * important changes in version 1.00 31/5/2003:
 
 This release marks the new development track as 'stable'. Version got
-upped to '1.00'. Not many changes, merely lots of succesfull test 
+upped to '1.00'. Not many changes, merely lots of successful test 
 reports constitute this version. However, a tiny fix regarding the
 reserved string 'VERSION' has been applied, as well as a few more FAQ
 entries have been added.

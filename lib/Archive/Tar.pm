@@ -1,15 +1,20 @@
-#!/usr/bin/perl -w
+### the gnu tar specification:
+### http://www.gnu.org/manual/tar/html_node/tar_toc.html
+###
+### and the pax format spec, which tar derives from:
+### http://www.opengroup.org/onlinepubs/007904975/utilities/pax.html
 
 package Archive::Tar;
 require 5.005_03;
 
 use strict;
-use vars qw[$DEBUG $error $VERSION $WARN $FOLLOW_SYMLINK $CHOWN];
+use vars qw[$DEBUG $error $VERSION $WARN $FOLLOW_SYMLINK $CHOWN $CHMOD];
 $DEBUG          = 0;
 $WARN           = 1;
 $FOLLOW_SYMLINK = 0;
-$VERSION        = "1.05";
+$VERSION        = "1.06";
 $CHOWN          = 1;
+$CHMOD          = 1;
 
 use IO::File;
 use Cwd;
@@ -158,7 +163,9 @@ sub read {
 
 sub _get_handle {
     my $self = shift;
-    my $file = shift; return unless defined $file;
+    my $file = shift;   return unless defined $file;
+                        return $file if ref $file;
+                        
     my $gzip = shift || 0;
     my $mode = shift || READ_ONLY->($gzip); # default to read only
     
@@ -177,6 +184,8 @@ sub _get_handle {
         
         } else {
             $fh = new IO::File;
+            
+            binmode $fh;
         }
     }
         
@@ -309,6 +318,35 @@ sub _read_tar {
     return $tarfile;
 }    
 
+=head2 $tar->contains_file( $filename )
+
+Check if the archive contains a certain file.
+It will return true if the file is in the archive, false otherwise.
+
+Note however, that this function does an exact match using C<eq>
+on the full path. So it can not compensate for case-insensitive file-
+systems or compare 2 paths to see if they would point to the same
+underlying file.
+
+=cut
+
+sub contains_file {
+    my $self = shift;
+    my $full = shift or return;
+    
+    my @parts = File::Spec->splitdir($full);
+    my $file  = pop @parts;
+    my $path  = File::Spec::Unix->catdir( @parts );
+    
+    for my $obj ( $self->get_files ) {
+        next unless $file eq $obj->name;
+        next unless $path eq $obj->prefix;
+    
+        return 1;       
+    }      
+    return;
+}    
+
 =head2 $tar->extract( [@filenames] )
 
 Write files whose names are equivalent to any of the names in
@@ -415,6 +453,11 @@ sub _extract_file {
         chown $entry->uid, $entry->gid, $full or
             $self->_error( qq[Could not set uid/gid on '$full'] );
     }
+    
+    if( $CHMOD ) {
+        chmod $entry->mode, $full or
+            $self->_error( qq[Could not chown '$full' to ] . $entry->mode );
+    }            
     
     return 1;
 }
@@ -1031,6 +1074,15 @@ By default, C<Archive::Tar> will try to C<chown> your files if it is
 able to. In some cases, this may not be desired. In that case, set 
 this variable to C<0> to disable C<chown>-ing, even if it were
 possible.
+
+The default is C<1>.
+
+=head2 $Archive::Tar::CHMOD
+
+By default, C<Archive::Tar> will try to C<chmod> your files to 
+whatever mode was specified for the particular file in the archive. 
+In some cases, this may not be desired. In that case, set this 
+variable to C<0> to disable C<chmod>-ing.
 
 The default is C<1>.
 

@@ -176,6 +176,10 @@ sub _new_from_chunk {
     
     my $obj = bless \%entry, $class;
 
+	### magic is a filetype string.. it should have something like 'ustar' or
+	### something similar... if the chunk is garbage, skip it
+	return unless $obj->magic !~ /\W/;
+
     ### store the original chunk ###
     $obj->raw( $chunk );
 
