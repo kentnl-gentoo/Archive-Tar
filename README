@@ -16,6 +16,24 @@ Archive::Tar will still work without IO::Zlib, it will just complain
 when you try to use a compressed archive or write one, since it 
 obviously can't. 
 
+* important changes in version 1.01 5/6/2003:
+
+This release holds some bugfixes over the 1.00 release, mainly these:
+
+-   Silence some warnings when writing directories to disk.
+-   A { } inside a map was interpreted as a block rather than a hashref 
+    constructor -- now fixed.
+-   Fix write() to work again as advertised when passed no arguments.
+-   This also means glob support to write is now definately not
+    available.
+-   Silly thinko of where splitpath() instead of splitdir() was used.
+
+Some new features/changes:
+
+-   Add a new method 'has_content' to Archive::Tar::File.
+-   Cygwin's tests will now also use the 'short' files, since cygwin
+    is built on top of an Win32 filesystem.
+
 * important changes in version 1.00 31/5/2003:
 
 This release marks the new development track as 'stable'. Version got

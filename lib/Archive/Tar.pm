@@ -7,7 +7,7 @@ use strict;
 use vars qw[$DEBUG $error $VERSION $WARN];
 $DEBUG      = 0;
 $WARN       = 1;
-$VERSION    = "1.00";
+$VERSION    = "1.01";
 
 use IO::File;
 use Cwd;
@@ -99,7 +99,7 @@ The C<read> will I<replace> any previous content in C<$tar>!
 The second argument may be considered optional if IO::Zlib is
 installed, since it will transparently Do The Right Thing. 
 Archive::Tar will warn if you try to pass a compressed file if 
-IO::Zlib is not available and simply return undef.
+IO::Zlib is not available and simply return.
 
 The third argument can be a hash reference with options. Note that 
 all options are case-sensitive.
@@ -136,15 +136,15 @@ sub read {
     
     unless( defined $file ) {
         $self->error( qq[No file to read from!] );
-        return undef;
+        return;
     } else {
         $self->_file( $file );
     }     
     
     my $handle = $self->_get_handle($file, $gzip, READ_ONLY->($gzip) ) 
-                    or return undef;
+                    or return;
 
-    my $data = $self->_read_tar( $handle, $opts ) or return undef;
+    my $data = $self->_read_tar( $handle, $opts ) or return;
 
     $self->_data( $data );    
 
@@ -153,7 +153,7 @@ sub read {
 
 sub _get_handle {
     my $self = shift;
-    my $file = shift; return undef unless defined $file;
+    my $file = shift; return unless defined $file;
     my $gzip = shift || 0;
     my $mode = shift || READ_ONLY->($gzip); # default to read only
     
@@ -168,7 +168,7 @@ sub _get_handle {
     } else {    
         if( $gzip ) {
             $self->_error( qq[Compression not available - Install IO::Zlib!] );
-            return undef;
+            return;
         
         } else {
             $fh = new IO::File;
@@ -177,7 +177,7 @@ sub _get_handle {
         
     unless( $fh->open( $file, $mode ) ) {
         $self->_error( qq[Could not create filehandle for '$file': $!!] );
-        return undef;
+        return;
     }
     
     return $fh;
@@ -185,7 +185,7 @@ sub _get_handle {
 
 sub _read_tar {
     my $self    = shift;
-    my $handle  = shift or return undef;
+    my $handle  = shift or return;
     my $opts    = shift || {};
 
     my $count   = $opts->{limit}    || 0;
@@ -208,7 +208,7 @@ sub _read_tar {
             my $gzip = GZIP_MAGIC_NUM;
             if( $chunk =~ /$gzip/ ) {
                 $self->_error( qq[Can not read compressed format in tar-mode] );
-                return undef;
+                return;
             }
         }
               
@@ -247,7 +247,7 @@ sub _read_tar {
 #            while( $block ) {
 #                $handle->read( $data, $block ) or (
 #                    $self->_error( qq[Could not read block for ] . $entry->name ),
-#                    return undef
+#                    return
 #                );
 #                $block > BUFFER 
 #                    ? $block -= BUFFER
@@ -260,7 +260,7 @@ sub _read_tar {
             ### this is because Compress::Zlib doesn't support it =/            
             if( $handle->read( $$data, $block ) < $block ) {
                 $self->_error( qq[Read error on tarfile ']. $entry->name ."'" );
-                return undef;
+                return;
             }
 
             ### throw away trailing garbage ###
@@ -328,7 +328,7 @@ sub extract {
 
     unless( scalar @files ) {
         $self->_error( qq[No files found for ] . $self->_file );
-        return undef;
+        return;
     }
     
     for my $file ( @files ) {
@@ -337,7 +337,7 @@ sub extract {
     
             unless( $self->_extract_file( $entry ) ) {
                 $self->_error( qq[Could not extract '$file'] );
-                return undef;
+                return;
             }        
         }
     }
@@ -347,25 +347,25 @@ sub extract {
 
 sub _extract_file {
     my $self    = shift;
-    my $entry   = shift or return undef;
+    my $entry   = shift or return;
     my $cwd     = cwd();
     
                             ### splitpath takes a bool at the end to indicate that it's splitting a dir    
     my ($vol,$dirs,$file)   = File::Spec::Unix->splitpath( $entry->name, $entry->is_dir );
     my @dirs                = File::Spec::Unix->splitdir( $dirs );
-    my @cwd                 = File::Spec->splitpath( $cwd, 1 );
+    my @cwd                 = File::Spec->splitdir( $cwd );
     my $dir                 = File::Spec->catdir(@cwd, @dirs);               
     
     if( -e $dir && !-d _ ) {
         $^W && $self->_error( qq['$dir' exists, but it's not a directory!\n] );
-        return undef;
+        return;
     }
     
     unless ( -d _ ) {
         eval { File::Path::mkpath( $dir, 0, 0777 ) };
         if( $@ ) {
             $self->_error( qq[Could not create directory '$dir': $@] );
-            return undef;
+            return;
         }
     }
     
@@ -376,31 +376,31 @@ sub _extract_file {
     
     if( $entry->is_unknown ) {
         $self->_error( qq[Unknown file type for file '$full'] );
-        return undef;
+        return;
     }
     
     if( length $entry->type && $entry->is_file ) {
         my $fh = new FileHandle;
         $fh->open( '>' . $full ) or (
             $self->_error( qq[Could not open file '$full': $!] ),
-            return undef
+            return
         );
     
         if( $entry->size ) {
             binmode $fh;
             syswrite $fh, $entry->data or (
                 $self->_error( qq[Could not write data to '$full'] ),
-                return undef
+                return
             );
         }
         
         close $fh or (
             $self->_error( qq[Could not close file '$full'] ),
-            return undef
+            return
         );     
     
     } else {
-        $self->_make_special_file( $entry, $full ) or return undef;
+        $self->_make_special_file( $entry, $full ) or return;
     } 
 
     utime time, $entry->mtime - TIME_OFFSET, $full or
@@ -416,8 +416,8 @@ sub _extract_file {
 
 sub _make_special_file {
     my $self    = shift;
-    my $entry   = shift     or return undef;
-    my $file    = shift;    return undef unless defined $file;
+    my $entry   = shift     or return;
+    my $file    = shift;    return unless defined $file;
     
     my $err;
     
@@ -472,15 +472,23 @@ sub list_files {
     my $aref = shift || [ ];
     
     unless( $self->_data ) {
-        $self->read() or return undef;
+        $self->read() or return;
     }
     
     if( @$aref == 0 or ( @$aref == 1 and $aref->[0] eq 'name' ) ) {
         return map { $_->name } @{$self->_data};     
     } else {
-        return map { my $o=$_; { map { $_ => $o->$_() } @$aref } } @{$self->_data};           
-    }    
     
+        #my @rv;
+        #for my $obj ( @{$self->_data} ) {
+        #    push @rv, { map { $_ => $obj->$_() } @$aref };
+        #}
+        #return @rv;
+        
+        ### this does the same as the above.. just needs a +{ }
+        ### to make sure perl doesn't confuse it for a block
+        return map { my $o=$_; +{ map { $_ => $o->$_() } @$aref } } @{$self->_data}; 
+    }    
 }
 
 sub _find_entry {
@@ -489,7 +497,7 @@ sub _find_entry {
 
     unless( defined $file ) {
         $self->_error( qq[No file specified] );
-        return undef;
+        return;
     }
     
     for my $entry ( @{$self->_data} ) {
@@ -497,7 +505,7 @@ sub _find_entry {
     }
     
     $self->_error( qq[No such file in archive: '$file'] );
-    return undef;
+    return;
 }    
 
 =head2 $tar->get_files( [@filenames] )
@@ -532,7 +540,7 @@ Return the content of the named file.
     
 sub get_content {
     my $self = shift;
-    my $entry = $self->_find_entry( shift ) or return undef;
+    my $entry = $self->_find_entry( shift ) or return;
     
     return $entry->data;        
 }    
@@ -545,7 +553,7 @@ Make the string $content be the content for the file named $file.
 
 sub replace_content {
     my $self = shift;
-    my $entry = $self->_find_entry( shift ) or return undef;
+    my $entry = $self->_find_entry( shift ) or return;
 
     return $entry->replace_content( shift );
 }    
@@ -563,10 +571,10 @@ Returns true on success and false on failure.
 
 sub rename {
     my $self = shift;
-    my $file = shift; return undef unless defined $file;
-    my $new  = shift; return undef unless defined $new;
+    my $file = shift; return unless defined $file;
+    my $new  = shift; return unless defined $new;
     
-    my $entry = $self->_find_entry( $file ) or return undef;
+    my $entry = $self->_find_entry( $file ) or return;
     
     return $entry->rename( $new );
 }    
@@ -600,7 +608,7 @@ only has effect on the object, not the underlying tarfile.
 =cut
 
 sub clear {
-    my $self = shift or return undef;
+    my $self = shift or return;
     
     $self->_data( [] );
     $self->_file( '' );
@@ -615,7 +623,7 @@ Write the in-memory archive to disk.  The first argument can either
 be the name of a file or a reference to an already open filehandle (a
 GLOB reference). If the second argument is true, the module will use
 IO::Zlib to write the file in a compressed format.  If IO::Zlib is 
-not available, the C<write> method will fail and return undef.
+not available, the C<write> method will fail and return.
 
 Specific levels of compression can be chosen by passing the values 2
 through 9 as the second parameter.
@@ -627,21 +635,23 @@ will be written to the archive as 'foo/a' and 'foo/b'.
 
 If no arguments are given, C<write> returns the entire formatted
 archive as a string, which could be useful if you'd like to stuff the
-archive into a socket or a pipe to gzip or something.  This
-functionality may be deprecated later, however, as you can also do
-this using a GLOB reference for the first argument.
+archive into a socket or a pipe to gzip or something.
 
 =cut
 
 sub write {
     my $self    = shift;
-    my $file    = shift || FileHandle->new;
+    my $file    = shift || '';
     my $gzip    = shift || 0;
     my $prefix  = shift || '';
 
-    my $handle = $self->_get_handle($file, $gzip, WRITE_ONLY->($gzip) ) 
-                    or return undef;
+    ### only need a handle if we have a file to print to ###
+    my $handle = $file 
+                    ? ( $self->_get_handle($file, $gzip, WRITE_ONLY->($gzip) ) 
+                        or return )
+                    : '';       
 
+    my @rv;
     for my $entry ( @{$self->_data} ) {
     
         ### names are too long, and will get truncated if we don't add a
@@ -657,55 +667,71 @@ sub write {
                         );
             unless( $longlink ) {
                 $self->_error( qq[Could not create 'LongLink' entry for oversize file '] . $entry->name ."'" );
-                return undef;
+                return;
             };                      
     
-            unless( $self->_write_to_handle( $handle, $longlink, $prefix ) ) {
-                $self->_error( qq[Could not write 'LongLink' entry for oversize file '] .  $entry->name ."'" );
-                return undef; 
-            }
+    
+            if( $file ) {
+                unless( $self->_write_to_handle( $handle, $longlink, $prefix ) ) {
+                    $self->_error( qq[Could not write 'LongLink' entry for oversize file '] .  $entry->name ."'" );
+                    return; 
+                }
+            } else {
+                push @rv, $self->_format_tar_entry( $longlink, $prefix );
+                push @rv, $entry->data if $entry->has_content;
+            }     
         }        
  
-        unless( $self->_write_to_handle( $handle, $entry, $prefix ) ) {
-            $self->_error( qq[Could not write entry '] . $entry->name . qq[' to archive] );
-            return undef;          
+        if( $file ) {
+            unless( $self->_write_to_handle( $handle, $entry, $prefix ) ) {
+                $self->_error( qq[Could not write entry '] . $entry->name . qq[' to archive] );
+                return;          
+            }
+        } else {
+            push @rv, $self->_format_tar_entry( $entry, $prefix );
+            push @rv, $entry->data if $entry->has_content;
         }
     }
-        
-    print $handle TAR_END x 2 or (
-        $self->_error( qq[Could not write tar end markers] ),
-        return undef
-    );
-
-    return 1;
+    
+    if( $file ) {    
+        print $handle TAR_END x 2 or (
+            $self->_error( qq[Could not write tar end markers] ),
+            return
+        );
+    } else {
+        push @rv, TAR_END x 2;
+    }
+    
+    return $file ? 1 : join '', @rv;
 }
 
 sub _write_to_handle {
     my $self    = shift;
-    my $handle  = shift or return undef;
-    my $entry   = shift or return undef;
+    my $handle  = shift or return;
+    my $entry   = shift or return;
     my $prefix  = shift || '';
     
     my $header = $self->_format_tar_entry( $entry, $prefix );
         
     unless( $header ) {
         $self->_error( qq[Could not format header for entry: ] . $entry->name );
-        return undef;
+        return;
     }      
 
     print $handle $header or (
         $self->_error( qq[Could not write header for: ] . $entry->name ),
-        return undef
+        return
     );
     
     ### i think this is safe for all types... --kane
     ### possibly missing the binmode...
     #if( length $entry->type and $entry->type == FILE ) {
+    if( $entry->has_content ) {
         print $handle $entry->data or (
             $self->_error( qq[Could not write data for: ] . $entry->name ),
-            return undef
+            return
         );
-    #}         
+    }         
 
     ### pad the end of the entry if required ###
     print $handle TAR_PAD->( $entry->size ) if $entry->size % BLOCK;
@@ -716,7 +742,7 @@ sub _write_to_handle {
 
 sub _format_tar_entry {
     my $self        = shift;
-    my $entry       = shift or return undef;
+    my $entry       = shift or return;
     my $ext_prefix  = shift || '';
 
     my $file    = $entry->name;
@@ -830,7 +856,7 @@ sub add_data {
     my $obj = Archive::Tar::File->new( data => $file, $data, $opt );
     unless( $obj ) {
         $self->_error( qq[Unable to add file: '$file'] );
-        return undef;
+        return;
     }      
 
     push @{$self->{_data}}, $obj;
@@ -865,7 +891,7 @@ method call instead.
             carp $DEBUG ? $longmess : $msg;
         }
         
-        return undef;
+        return;
     }
     
     sub error {
@@ -895,7 +921,7 @@ These files must all exist.  Any files which don\'t exist or can\'t be
 read are silently ignored.
 
 If the archive creation fails for any reason, C<create_archive> will
-return undef.  Please use the C<error> method to find the cause of the
+return.  Please use the C<error> method to find the cause of the
 failure.
 
 =cut
@@ -903,7 +929,7 @@ failure.
 sub create_archive {
     my $class = shift;
     
-    my $file    = shift; return undef unless defined $file;
+    my $file    = shift; return unless defined $file;
     my $gzip    = shift || 0;
     my @files   = @_;
     
@@ -936,11 +962,11 @@ references.
 
 sub list_archive {
     my $class   = shift;
-    my $file    = shift; return undef unless defined $file;
+    my $file    = shift; return unless defined $file;
     my $gzip    = shift || 0;
 
     my $tar = $class->new($file, $gzip);
-    return undef unless $tar;
+    return unless $tar;
     
     return $tar->list_files( @_ ); 
 }
@@ -954,17 +980,17 @@ be created underneath the current working directory.
 
 C<extract_archive> will return a list of files it extract.
 If the archive extraction fails for any reason, C<extract_archive>
-will return undef.  Please use the C<error> method to find the cause
+will return.  Please use the C<error> method to find the cause
 of the failure.
 
 =cut
 
 sub extract_archive {
     my $class   = shift;
-    my $file    = shift; return undef unless defined $file;
+    my $file    = shift; return unless defined $file;
     my $gzip    = shift || 0;
     
-    my $tar = $class->new( ) or return undef;
+    my $tar = $class->new( ) or return;
     
     return $tar->read( $file, $gzip, { extract => 1 } );
 }

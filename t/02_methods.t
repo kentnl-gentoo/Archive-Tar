@@ -18,7 +18,8 @@ my $expect = {
 };
 
 ### wintendo can't deal with too long paths, so we might have to skip tests ###
-my $TOO_LONG    = $^O eq 'MSWin32' && length( cwd(). $file ) > 247; 
+my $TOO_LONG    =   ($^O eq 'MSWin32' or $^O eq 'cygwin') 
+                    && length( cwd(). $file ) > 247; 
 
 if( $TOO_LONG ) {
     SKIP: {

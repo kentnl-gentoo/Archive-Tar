@@ -31,8 +31,8 @@ my $tmpl = [
 
 ### end UNPACK items ###    
         raw         => 0,   # the raw data chunk
-        data        => 0,   # the data associated with the file -- This  might be
-                            # very memory intensive
+        data        => 0,   # the data associated with the file -- 
+                            # This  might be very memory intensive
 ];
 
 ### install get/set accessors for this object.
@@ -42,7 +42,11 @@ for ( my $i=0; $i<scalar @$tmpl ; $i+=2 ) {
     *{__PACKAGE__."::$key"} = sub {
         my $self = shift;
         $self->{$key} = $_[0] if @_;
-        return $self->{$key};
+        
+        ### just in case the key is not there or undef or something ###    
+        {   local $^W = 0;
+            return $self->{$key};
+        }
     }
 }
 
@@ -335,6 +339,20 @@ sub validate {
 	return unpack ("%16C*", $raw) == $self->chksum ? 1 : 0;	
 }
 
+=head2 has_content
+
+Returns a boolean to indicate whether the current object has content.
+Some special files like directories and so on never will have any
+content. This method is mainly to make sure you don't get warnings 
+for using unitialized values when looking at an objects's content.
+
+=cut
+
+sub has_content {
+    my $self = shift;
+    return defined $self->data() && length $self->data() ? 1 : 0;
+}
+
 =head2 get_content
 
 Returns the current content for the in-memory file
@@ -374,7 +392,7 @@ Returns true on success, false on failure.
 
 sub replace_content {
     my $self = shift;
-    my $data = shift;
+    my $data = shift or '';
     
     $self->data( $data );
     $self->size( length $data );
