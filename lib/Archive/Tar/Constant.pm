@@ -8,9 +8,9 @@ BEGIN {
                 FILE HARDLINK SYMLINK CHARDEV BLOCKDEV DIR FIFO SOCKET UNKNOWN
                 BUFFER HEAD READ_ONLY WRITE_ONLY UNPACK PACK TIME_OFFSET ZLIB
                 BLOCK_SIZE TAR_PAD TAR_END ON_UNIX BLOCK CAN_READLINK MAGIC 
-                VERSION UNAME GNAME CAN_CHOWN MODE CHECK_SUM UID GID NAME_LENGTH
+                TAR_VERSION UNAME GNAME CAN_CHOWN MODE CHECK_SUM UID GID 
                 GZIP_MAGIC_NUM MODE_READ LONGLINK LONGLINK_NAME PREFIX_LENGTH
-                LABEL
+                LABEL NAME_LENGTH
             ];
 
     require Time::Local if $^O eq "MacOS";
@@ -58,7 +58,7 @@ use constant PREFIX_LENGTH  => 155;
 
 use constant TIME_OFFSET    => ($^O eq "MacOS") ? Time::Local::timelocal(0,0,0,1,0,70) : 0;    
 use constant MAGIC          => "ustar";
-use constant VERSION        => "00";
+use constant TAR_VERSION    => "00";
 use constant LONGLINK_NAME  => '././@LongLink';
 
 use constant ZLIB           => do { eval { require IO::Zlib }; $@ ? 0 : 1 };

@@ -1,5 +1,5 @@
 This is the README file for Archive::Tar, the Perl module for creation
-and manipulation of tar files.
+and in-memory manipulation of tar files.
 
 * Installation
 
@@ -13,8 +13,16 @@ make install
 This module uses no C-coded parts in itself, but it will try to use
 the IO::Zlib module to read and write gzipped tarfiles.
 Archive::Tar will still work without IO::Zlib, it will just complain 
-when you try to use a compressed archive or write on, since it 
+when you try to use a compressed archive or write one, since it 
 obviously can't. 
+
+* important changes in version 1.00 31/5/2003:
+
+This release marks the new development track as 'stable'. Version got
+upped to '1.00'. Not many changes, merely lots of succesfull test 
+reports constitute this version. However, a tiny fix regarding the
+reserved string 'VERSION' has been applied, as well as a few more FAQ
+entries have been added.
 
 * important changes in version 0.99_06 5/5/2003:
 
@@ -52,7 +60,7 @@ Added options to be passed to read, namely:
 	- extract (to extract while reading)
 	- limit (to limit the amount of files read from the archive)
 
-Implemented the '././@LongLinke' support, which is GNU's way of
+Implemented the '././@LongLink' support, which is GNU's way of
 dealing with filenames that are longer than 255 chars.
 
 Added a global variable $WARN which controls whether warnings get

@@ -219,7 +219,7 @@ sub _new_from_file {
         type        => $type,         
         linkname    => ($type == SYMLINK and CAN_READLINK) ? readlink $file : '',
         magic       => MAGIC,
-        version     => VERSION,
+        version     => TAR_VERSION,
         uname       => UNAME->( $hash{uid} ),
         gname       => GNAME->( $hash{gid} ),
         devmajor    => 0,   # not handled
@@ -253,7 +253,7 @@ sub _new_from_data {
         type        => FILE,
         linkname    => '',
         magic       => MAGIC,
-        version     => VERSION,
+        version     => TAR_VERSION,
         uname       => UNAME->( UID ),
         gname       => GNAME->( GID ),
         devminor    => 0,

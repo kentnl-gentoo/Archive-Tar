@@ -7,7 +7,7 @@ use strict;
 use vars qw[$DEBUG $error $VERSION $WARN];
 $DEBUG      = 0;
 $WARN       = 1;
-$VERSION    = "0.99_06";
+$VERSION    = "1.00";
 
 use IO::File;
 use Cwd;
@@ -749,7 +749,7 @@ sub _format_tar_entry {
                 
                 (map { $entry->$_() }                 qw[type linkname magic]),
                 
-                $entry->version || '00',
+                $entry->version || TAR_VERSION,
                 
                 (map { $entry->$_() }                 qw[uname gname]),
                 (map { sprintf( $f1, $entry->$_() ) } qw[devmajor devminor]),
@@ -1004,6 +1004,10 @@ use is very much discouraged. Use the C<error()> method instead:
 
 =over 4
 
+=item What's the minimum perl version required to run Archive::Tar?
+
+You will need perl version 5.005_03 or newer. 
+
 =item Isn't Archive::Tar slow?
 
 Yes it is. It's pure perl, so it's a lot slower then your C</bin/tar>
@@ -1022,6 +1026,12 @@ instead. It will optimize and write to disk immediately.
 =item Can't you lazy-load data instead?
 
 No, not easily. See previous question.
+
+=item How much memory will an X kb tar file need?
+
+Probably more than X kb, since it will all be read into memory. If 
+this is a problem, and you don't need to do in memory manipulation 
+of the archive, consider using C</bin/tar> instead.
 
 =back
 
