@@ -16,6 +16,12 @@ Archive::Tar will still work without IO::Zlib, it will just complain
 when you try to use a compressed archive or write one, since it 
 obviously can't. 
 
+* important changes in version 1.07 17/10/2003:
+
+This release holds some bugfixes over the 1.06 release:
+-   Quell some annoying warnings about binmode on unopened filehandles
+-   Add tests for binary files included in a tarball
+
 * important changes in version 1.06 15/10/2003:
 
 This release holds some bugfixes and new features over the 1.05 release.

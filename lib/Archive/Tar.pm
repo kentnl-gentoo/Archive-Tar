@@ -12,7 +12,7 @@ use vars qw[$DEBUG $error $VERSION $WARN $FOLLOW_SYMLINK $CHOWN $CHMOD];
 $DEBUG          = 0;
 $WARN           = 1;
 $FOLLOW_SYMLINK = 0;
-$VERSION        = "1.06";
+$VERSION        = "1.07";
 $CHOWN          = 1;
 $CHMOD          = 1;
 
@@ -169,7 +169,7 @@ sub _get_handle {
     my $gzip = shift || 0;
     my $mode = shift || READ_ONLY->($gzip); # default to read only
     
-    my $fh;
+    my $fh; my $bin;
     
     ### only default to ZLIB if we're not trying to /write/ to a handle ###
     if( ZLIB and $gzip || MODE_READ->( $mode ) ) {
@@ -184,8 +184,7 @@ sub _get_handle {
         
         } else {
             $fh = new IO::File;
-            
-            binmode $fh;
+            $bin++;
         }
     }
         
@@ -193,6 +192,8 @@ sub _get_handle {
         $self->_error( qq[Could not create filehandle for '$file': $!!] );
         return;
     }
+    
+    binmode $fh if $bin;
     
     return $fh;
 }
@@ -726,7 +727,9 @@ sub write {
                 }
             } else {
                 push @rv, $self->_format_tar_entry( $longlink, $prefix );
-                push @rv, $entry->data if $entry->has_content;
+                push @rv, $entry->data              if  $entry->has_content;
+                push @rv, TAR_PAD->( $entry->size ) if  $entry->has_content &&
+                                                        $entry->size % BLOCK;
             }     
         }        
  
@@ -737,7 +740,9 @@ sub write {
             }
         } else {
             push @rv, $self->_format_tar_entry( $entry, $prefix );
-            push @rv, $entry->data if $entry->has_content;
+            push @rv, $entry->data              if  $entry->has_content;
+            push @rv, TAR_PAD->( $entry->size ) if  $entry->has_content &&
+                                                        $entry->size % BLOCK;
         }
     }
     
