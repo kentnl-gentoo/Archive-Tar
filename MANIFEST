@@ -1,6 +1,11 @@
+README
 MANIFEST
 Makefile.PL
-README
 lib/Archive/Tar.pm
-bin/ptar
-t/01_Tar.t
+lib/Archive/Tar/Constant.pm
+lib/Archive/Tar/File.pm
+t/01_use.t
+t/02_methods.t
+t/src/bar.tar
+t/src/foo.tgz
+t/src/b

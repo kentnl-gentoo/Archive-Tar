@@ -11,12 +11,41 @@ make test (optional but recommended)
 make install
 
 This module uses no C-coded parts in itself, but it will try to use
-the Compress::Zlib module to read and write gzipped tarfiles.
-Archive::Tar will still work without Zlib, it will just complain a
-little bit (and, of course, not be able to use compression). The
-complaining will be removed when the module leaves the alpha stage,
-and can be trivially removed by commenting out the offending print
-near the top of Tar.pm.
+the IO::Zlib module to read and write gzipped tarfiles.
+Archive::Tar will still work without IO::Zlib, it will just complain 
+when you try to use a compressed archive or write on, since it 
+obviously can't. 
+
+* important changes in version 0.99 16/3/2003:
+
+Total rewrite from the ground up. Removed as many as the nasty 
+bits (no pun intended) as possible and tucked them away. 
+No code from the old distribution remains.
+
+Cleaned up the API, introduced clean error handling and just 
+generally removed a lot of cruft.
+
+Note that Archive::Tar now requires perl version 5.005_03 or higher 
+to run.
+
+Introduced 2 new submodules:
+Archive::Tar::Constant
+    Simply holds all constants, like block length, tar headers etc
+    
+Archive::Tar::File
+    Object class for all files in a tar archive, to make for easier
+    manipulataion of the archive in-memory.
+    See perldoc Archive::Tar::File after installation.
+
+Added a few features:
+write() now takes an optional 3rd paramater (prefix) which will allow
+you to tuck away all files in that sub directory.
+
+rename() is introduced, allowing for easy renaming of files in the
+archive.
+
+get_files() returns a file of all Archive::Tar::File objects in the
+current read-in archive.
 
 * important changes in version 0.23, 21/1/2003:
 
