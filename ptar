@@ -6,10 +6,7 @@ use File::Find;
 
 my $switches = shift @ARGV;
 my $tarfile = "./default.tar";
-my $create = 0;
-my $list = 0;
-my $extract = 0;
-my $debug = 0;
+my ($create, $list, $extract, $compress, $debug, $verbose) = (0, 0, 0, 0);
 
 if (!$switches) {
     print<<EOF;
@@ -57,19 +54,16 @@ foreach (split(//,$switches)) {
 if ($extract+$list+$create>1) {
     die "More than one of x, c and t doesn't make sense.\n";
 }
-
-if ($list) {
+elsif ($list) {
     print join "\n", Archive::Tar->list_archive ($tarfile),"";
 }
-
-if ($extract) {
+elsif ($extract) {
     Archive::Tar->extract_archive ($tarfile);
 }
-
-if ($create) {
+elsif ($create) {
     my @f;
     
-    finddepth(sub {push @f,$File::Find::name;
-		   print $File::Find::name,"\n" if $verbose},@ARGV);
+    find (sub { push @f,$File::Find::name;
+		print $File::Find::name,"\n" if $verbose}, @ARGV);
     Archive::Tar->create_archive ($tarfile, $compress, @f);
 }

@@ -3,13 +3,13 @@ package Archive::Tar;
 use strict;
 use Carp qw(carp);
 use Cwd;
-use Fcntl qw(O_RDONLY O_WRONLY O_CREAT O_TRUNC);
+use Fcntl qw(O_RDONLY O_RDWR O_WRONLY O_CREAT O_TRUNC F_DUPFD F_GETFL);
 use File::Basename;
 use Symbol;
 require Time::Local if $^O eq "MacOS";
 
 use vars qw($VERSION @ISA @EXPORT_OK %EXPORT_TAGS);
-$VERSION = do { my @a=q$Name: version_0_21 $ =~ /\d+/g; sprintf "%d." . ("%02d" x $#a ),@a };
+$VERSION = do { my @a=q$Name: version_0_22 $ =~ /\d+/g; sprintf "%d." . ("%02d" x $#a ),@a };
 
 require Exporter;
 @ISA = qw(Exporter);
@@ -87,6 +87,11 @@ sub error {
     $error;
 }
 
+sub set_error {
+    shift;
+    $error = "@_";
+}
+
 ## filetype -- Determine the type value for a given file
 sub filetype {
     my $file = shift;
@@ -116,60 +121,62 @@ sub filetype {
 }
 
 sub _make_special_file_UNIX {
-    my ($file) = @_;
+    # $file is the last component of $entry->{name}
+    my ($entry, $file) = @_;
 
-    if ($file->{type} == SYMLINK) {
-	symlink $_->{linkname}, $file or
-	    $^W && carp ("Making symbolic link from ", $file->{linkname}, 
-			 " to ", $file->{name}, ", failed.\n");
+    if ($entry->{type} == SYMLINK) {
+	symlink $entry->{linkname}, $file or
+	    $^W && carp ("Making symbolic link from ", $entry->{linkname}, 
+			 " to ", $entry->{name}, ", failed.\n");
     }
-    elsif ($file->{type} == HARDLINK) {
-	link $_->{linkname}, $file or
-	    $^W && carp ("Hard linking ", $_->{linkname}, 
-			 " to ", $file, ", failed.\n");
+    elsif ($entry->{type} == HARDLINK) {
+	link $entry->{linkname}, $file or
+	    $^W && carp ("Hard linking ", $entry->{linkname}, 
+			 " to ", $entry->{name}, ", failed.\n");
     }
-    elsif ($file->{type} == FIFO) {
+    elsif ($entry->{type} == FIFO) {
 	system("mknod","$file","p") or
-	    $^W && carp "Making fifo ", $file, ", failed.\n";
+	    $^W && carp "Making fifo ", $entry->{name}, ", failed.\n";
     }
-    elsif ($file->{type} == BLOCKDEV) {
-	system("mknod","$file","b",$_->{devmajor},$_->{devminor}) or
-	    $^W && carp ("Making block device ", $file,
-			 " (maj=", $_->{devmajor}, 
-			 ", min=", $_->{devminor}, "), failed.\n");
+    elsif ($entry->{type} == BLOCKDEV) {
+	system("mknod","$file","b",$entry->{devmajor},$entry->{devminor}) or
+	    $^W && carp ("Making block device ", $entry->{name},
+			 " (maj=", $entry->{devmajor}, 
+			 ", min=", $entry->{devminor}, "), failed.\n");
     }
-    elsif ($file->{type} == CHARDEV) {
-	system("mknod", "$file", "c", $_->{devmajor}, $_->{devminor}) or
-	    $^W && carp ("Making block device ", $file, 
-			 " (maj=", $_->{devmajor}, 
-			 " ,min=", $_->{devminor}, "), failed.\n");
+    elsif ($entry->{type} == CHARDEV) {
+	system("mknod", "$file", "c", $entry->{devmajor}, $entry->{devminor}) or
+	    $^W && carp ("Making block device ", $entry->{name}, 
+			 " (maj=", $entry->{devmajor}, 
+			 " ,min=", $entry->{devminor}, "), failed.\n");
     }
 }
 
 sub _make_special_file_Win32 {
-    my ($file) = @_;
+    # $file is the last component of $entry->{name}
+    my ($entry, $file) = @_;
 
-    if ($file->{type} == SYMLINK) {
-	$^W && carp ("Making symbolic link from ", $file->{linkname}, 
-		     " to ", $file->{name}, ", failed.\n");
+    if ($entry->{type} == SYMLINK) {
+	$^W && carp ("Making symbolic link from ", $entry->{linkname}, 
+		     " to ", $entry->{name}, ", failed.\n");
     }
-    elsif ($file->{type} == HARDLINK) {
-	link $_->{linkname}, $file->{name} or
-	    $^W && carp ("Making hard link from ", $file->{linkname}, 
-			 " to ", $file->{name}, ", failed.\n");
+    elsif ($entry->{type} == HARDLINK) {
+	link $entry->{linkname}, $file or
+	    $^W && carp ("Making hard link from ", $entry->{linkname}, 
+			 " to ", $entry->{name}, ", failed.\n");
     }
-    elsif ($file->{type} == FIFO) {
-	$^W && carp "Making fifo ", $file, ", failed.\n";
+    elsif ($entry->{type} == FIFO) {
+	$^W && carp "Making fifo ", $entry->{name}, ", failed.\n";
     }
-    elsif ($file->{type} == BLOCKDEV) {
-	$^W && carp ("Making block device ", $file->{name},
-		     " (maj=", $file->{devmajor}, 
-		     ", min=", $file->{devminor}, "), failed.\n");
+    elsif ($entry->{type} == BLOCKDEV) {
+	$^W && carp ("Making block device ", $entry->{name},
+		     " (maj=", $entry->{devmajor}, 
+		     ", min=", $entry->{devminor}, "), failed.\n");
     }
-    elsif ($file->{type} == CHARDEV) {
-	$^W && carp ("Making block device ", $file->{name},
-		     " (maj=", $file->{devmajor}, 
-		     " ,min=", $file->{devminor}, "), failed.\n");
+    elsif ($entry->{type} == CHARDEV) {
+	$^W && carp ("Making block device ", $entry->{name},
+		     " (maj=", $entry->{devmajor}, 
+		     " ,min=", $entry->{devminor}, "), failed.\n");
     }
 }
 
@@ -222,19 +229,36 @@ sub _munge_file {
 }
 
 sub _get_handle {
-    my $fh;
+    my ($fh, $flags, $mode);
 
-    sysseek $_[0], 0, 0;
+    sysseek ($_[0], 0, 0)
+	or goto &_drat;
 
-    if ($compression && (@_ < 2 || $_[1] != 0)) {
-	my $mode = $#_ ? (int($_[1]) > 1 ?
-			  "wb".int($_[1]) : "wb") : "rb";
-
-	$fh = Compress::Zlib::gzopen ($_[0], $mode)
-	    or goto &_drat;
+    if ($^O eq "MSWin32") {
+	$fh = $_[0];
     }
     else {
-	$fh = bless *{$_[0]}{IO}, "Archive::Tar::_io";
+	$fh = fcntl ($_[0], F_DUPFD, 0)
+	    or goto &_drat;
+    }
+    if ($compression && (@_ < 2 || $_[1] != 0)) {
+	$mode = $#_ ? (int($_[1]) > 1 ?
+			  "wb".int($_[1]) : "wb") : "rb";
+
+#	$fh = Compress::Zlib::gzopen ($_[0], $mode)
+#	    or &_drat;
+	$fh = Compress::Zlib::gzdopen_ ($fh, $mode, 0)
+	    or &_drat;
+    }
+    else {
+	$flags = fcntl ($_[0], F_GETFL, 0) & (O_RDONLY | O_WRONLY | O_RDWR);
+	$mode = ($flags == O_WRONLY) ? ">&=$fh" : 
+	    ($flags == O_RDONLY) ? "<&=$fh" : "+>&=$fh";
+	$fh = gensym;
+	open ($fh, $mode)
+	  or goto &_drat;
+
+	$fh = bless *{$fh}{IO}, "Archive::Tar::_io";
 	binmode $fh
 	    or goto &_drat;
     }
@@ -292,7 +316,7 @@ sub _read_tar {
 	# some broken tar-s don't set the type for directories
 	# so we ass_u_me a directory if the name ends in slash
 	$type = DIR
-	    if $name =~ m|/$| and not $type;
+	    if $name =~ m|/$| and $type == FILE;
 
 	last READLOOP if $head eq "\0" x 512; # End of archive
 	# Apparently this should really be two blocks of 512 zeroes,
@@ -304,8 +328,8 @@ sub _read_tar {
 	   warn "$name: checksum error.\n";
 	}
 
-	unless ($extract) {
-	# Always read in full 512 byte blocks
+	unless ($extract || $type != FILE) {
+	    # Always read in full 512 byte blocks
 	    $block = $size & 0x01ff ? ($size & ~0x01ff) + 512 : $size;
 	    if ($seekable) {
 		while ($block > 4096) {
@@ -356,15 +380,17 @@ sub _read_tar {
 	    _extract_file ($entry, $file);
 	    $file->gzread ($head, 512 - ($size & 0x1ff)) 
 		or goto &_drat
-		    if ($size & 0x1ff);
+		    if ($size & 0x1ff && $type == FILE);
 	}
 	else {
 	    push @$tarfile, $entry;
 	}
 
-	$offset += $tar_header_length +
-	    ($size & 0x01ff ? ($size & ~0x01ff) + 512 : $size)
-		if $seekable;
+	if ($seekable) {
+	    $offset += $tar_header_length;
+	    $offset += ($size & 0x01ff) ? ($size & ~0x01ff) + 512 : $size
+		if $type == FILE;
+	}
 	$file->gzread ($head, $tar_header_length) 
 	    or goto &_drat;
     }
@@ -397,9 +423,9 @@ sub _format_tar_entry {
 
     $tmp = pack ($tar_pack_header,
 		 $file,
-		 sprintf("%6o ",$ref->{mode}),
-		 sprintf("%6o ",$ref->{uid}),
-		 sprintf("%6o ",$ref->{gid}),
+		 sprintf("%06o ",$ref->{mode}),
+		 sprintf("%06o ",$ref->{uid}),
+		 sprintf("%06o ",$ref->{gid}),
 		 sprintf("%11o ",$ref->{size}),
 		 sprintf("%11o ",$ref->{mtime}),
 		 "",		#checksum field - space padded by pack("A8")
@@ -440,7 +466,24 @@ sub _write_tar {
 	next
 	    unless (ref ($entry) eq 'HASH');
 
-	my $src = $^O eq "MacOS" ? "" : $entry->{name};
+	my $src;
+        if ($^O eq "MacOS") {  #convert back from Unix to Mac path
+            my @parts = split(/\//, $entry->{name});
+
+            $src = $parts[0] ? ":" : "";
+            foreach (@parts) {
+		next if !$_ || $_ eq ".";  
+                s,:,/,g;
+
+		$_ = ":"
+		    if ($_ eq "..");
+
+		$src .= ($src =~ /:$/) ? $_ : ":$_";
+	    }
+        }
+	else {
+            $src = $entry->{name};
+        }
 	sysopen (FH, $src, O_RDONLY)
 	    && binmode (FH)
 		or next
@@ -499,7 +542,7 @@ sub _add_file {
 		 uid => $uid,
 		 gid => $gid,
 		 size => $size,
-		 mtime => (($mtime - $time_offset) || 0),
+		 mtime => (($mtime - $time_offset) | 0),
 		 chksum => "      ",
 		 type => $type, 
 		 linkname => $linkname,
@@ -524,6 +567,7 @@ sub _extract_file {
     # are given according to Unix standards.
     # Which they *are*, according to the tar format spec!
     @path = split(/\//,$entry->{name});
+    $path[0] = '/' unless defined $path[0]; # catch absolute paths
     $file = pop @path;
     $file =~ s,:,/,g
 	if $^O eq "MacOS";
@@ -566,7 +610,8 @@ sub _extract_file {
 	    syswrite FH, $entry->{data}, $entry->{size}
 		or goto &_drat
 	}
-	close FH;
+	close FH
+	    or goto &_drat
     }
     elsif ($entry->{type} == DIR) { # Directory
 	goto &_drat
@@ -580,9 +625,9 @@ sub _extract_file {
 	return undef;
     }
     else {
-	_make_special_file ($entry);
+	_make_special_file ($entry, $file);
     }
-    utime time, $entry->{mtime}, $file;
+    utime time, $entry->{mtime} + $time_offset, $file;
 
     # We are root, and chown exists
     chown $entry->{uid}, $entry->{gid}, $file
@@ -615,7 +660,8 @@ sub create_archive {
 
     $handle = gensym;
     open $handle, ref ($file) ? ">&". fileno ($file) : ">" . $file
-	or goto &_drat;
+	and binmode ($handle)
+	    or goto &_drat;
 
     _write_tar (_get_handle ($handle, int ($compress)),
 		map {_add_file ($_)} @_);
@@ -628,7 +674,8 @@ sub list_archive {
 
     $handle = gensym;
     open $handle, ref ($file) ? "<&". fileno ($file) : "<" . $file
-	or goto &_drat;
+	and binmode ($handle)
+	    or goto &_drat;
 
     my $data = _read_tar (_get_handle ($handle), 1);
 
@@ -646,7 +693,8 @@ sub extract_archive {
 
     $handle = gensym;
     open $handle, ref ($file) ? "<&". fileno ($file) : "<" . $file
-	or goto &_drat;
+	and binmode ($handle)
+	    or goto &_drat;
 
     _read_tar (_get_handle ($handle), 0, 1);
 }
@@ -680,7 +728,8 @@ sub read {
 
     $self->{_handle} = gensym;
     open $self->{_handle}, ref ($file) ? "<&". fileno ($file) : "<" . $file
-	or goto &_drat;
+	and binmode ($self->{_handle})
+	    or goto &_drat;
 
     $self->{_data} = _read_tar (_get_handle ($self->{_handle}), 
 				  sysseek $self->{_handle}, 0, 1);
@@ -696,7 +745,8 @@ sub write {
 
     my $handle = gensym;
     open $handle, ref ($file) ? ">&". fileno ($file) : ">" . $file
-	or goto &_drat;
+	and binmode ($handle)
+	    or goto &_drat;
 
     if ($compress && !$compression) {
 	$error = "Compression not available.\n";
@@ -736,7 +786,7 @@ sub add_data {
     $ref->{uid} = $>;
     $ref->{gid} = (split(/ /,$)))[0]; # Yuck
     $ref->{size} = length $data;
-    $ref->{mtime} = ((time - $time_offset) || 0),
+    $ref->{mtime} = ((time - $time_offset) | 0),
     $ref->{chksum} = "      ";	# Utterly pointless
     $ref->{type} = FILE;		# Ordinary file
     $ref->{linkname} = "";
@@ -759,12 +809,22 @@ sub add_data {
     return 1;
 }
 
+sub rename {
+    my ($self) = shift;
+    my $entry;
+
+    foreach $entry (@{$self->{_data}}) {
+	@{$self->{_data}} = grep {$_->{name} ne $entry} @{$self->{'_data'}};
+    }
+    return $self;
+}
+
 sub remove {
     my ($self) = shift;
-    my $file;
+    my $entry;
 
-    foreach $file (@_) {
-	@{$self->{_data}} = grep {$_->{name} ne $file} @{$self->{'_data'}};
+    foreach $entry (@_) {
+	@{$self->{_data}} = grep {$_->{name} ne $entry} @{$self->{'_data'}};
     }
     return $self;
 }
@@ -785,11 +845,13 @@ sub get_content {
 	$handle->gzseek ($entry->{offset}, 0)
 	    or goto &_drat;
 
-	$handle->gzread ($data, $entry->{size})
+	$handle->gzread ($data, $entry->{size}) != -1
 	    or goto &_drat;
 
 	return $data;
     }
+
+    return;
 }
 
 # Replace the content of a file
@@ -811,11 +873,13 @@ sub replace_content {
 # Write a single (probably) file from the in-memory archive to disk
 sub extract {
     my $self = shift;
+    my @files = @_;
     my ($file, $entry);
 
+    @files = list_files ($self) unless @files;
     foreach $entry (@{$self->{_data}}) {
 	my $cnt = 0;
-	foreach $file (@_) {
+	foreach $file (@files) {
 	    ++$cnt, next
 		unless $entry->{name} eq $file;
 	    my $handle = $entry->{offset} && _get_handle ($self->{_handle});
@@ -829,6 +893,7 @@ sub extract {
 	last
 	    unless @_;
     }
+    $self;
 }
 
 
@@ -853,7 +918,7 @@ sub list_files {
 #
 # Yes, I could have used the IO::* class hierarchy here, but I'm
 # trying to minimise the necessity for non-core modules on perl5
-# environments > 5.004
+# environments < 5.004
 
 package Archive::Tar::_io;
 
@@ -901,12 +966,12 @@ This is a module for the handling of tar archives.
 Archive::Tar provides an object oriented mechanism for handling tar
 files.  It provides class methods for quick and easy files handling
 while also allowing for the creation of tar file objects for custom
-manipluation.  If you have the Compress::Zlib module installed,
+manipulation.  If you have the Compress::Zlib module installed,
 Archive::Tar will also support compressed or gzipped tar files.
 
 =head2 Class Methods
 
-The class methods should be sufficient For most tar file interaction.
+The class methods should be sufficient for most tar file interaction.
 
 =over 4
 
@@ -914,13 +979,13 @@ The class methods should be sufficient For most tar file interaction.
 
 Creates a tar file from the list of files provided.  The first
 argument can either be the name of the tar file to create or a
-reference to an open file handle (eg a GLOB reference).
+reference to an open file handle (e.g. a GLOB reference).
 
 The second argument specifies the level of compression to be used, if
 any.  Compression of tar files requires the installation of the
 Compress::Zlib module.  Specific levels or compression may be
 requested by passing a value between 2 and 9 as the second argument.
-Any other value evalating as true will result in the default
+Any other value evaluating as true will result in the default
 compression level being used.
 
 The remaining arguments list the files to be included in the tar file.
@@ -937,7 +1002,7 @@ failure.
 
 Returns a list of the names of all the files in the archive.  The
 first argument can either be the name of the tar file to create or a
-reference to an open file handle (eg a GLOB reference).
+reference to an open file handle (e.g. a GLOB reference).
 
 If C<list_archive()> is passed an array reference as its second
 argument it returns a list of hash references containing the requested
@@ -953,7 +1018,7 @@ references.
 
 Extracts the contents of the tar file.  The first argument can either
 be the name of the tar file to create or a reference to an open file
-handle (eg a GLOB reference).  All relative paths in the tar file will
+handle (e.g. a GLOB reference).  All relative paths in the tar file will
 be created underneath the current working directory.
 
 If the archive extraction fails for any reason, C<extract_archive>
@@ -979,9 +1044,9 @@ any reason, C<new()> returns undef.
 =item read ($ref, $compressed)
 
 Read the given tar file into memory. The first argument can either be
-the name of a file or a reference to an already open file handle (eg a
+the name of a file or a reference to an already open file handle (e.g. a
 GLOB reference).  The second argument indicates whether the file
-referenced by the first arguemt is compressed.
+referenced by the first argument is compressed.
 
 The second argument is now optional as Archive::Tar will automatically
 detect compressed archives.
@@ -1022,7 +1087,7 @@ the name of a file or a reference to an already open file handle (be a
 GLOB reference).  If the second argument is true, the module will use
 Compress::Zlib to write the file in a compressed format.  If
 Compress:Zlib is not available, the C<write> method will fail.
-Specific levels of compression can be choosen by passing the values 2
+Specific levels of compression can be chosen by passing the values 2
 through 9 as the second parameter.
 
 If no arguments are given, C<write> returns the entire formatted
@@ -1034,12 +1099,15 @@ this using a GLOB reference for the first argument.
 =item extract(@filenames)
 
 Write files whose names are equivalent to any of the names in
-C<@filenames> to disk, creating subdirectories as neccesary. This
+C<@filenames> to disk, creating subdirectories as necessary. This
 might not work too well under VMS.  Under MacPerl, the file\'s
 modification time will be converted to the MacOS zero of time, and
 appropriate conversions will be done to the path.  However, the length
 of each element of the path is not inspected to see whether it\'s
 longer than MacOS currently allows (32 characters).
+
+If C<extract> is called without a list of file names, the entire
+contents of the archive are extracted.
 
 =item list_files(['property', 'property',...])
 
@@ -1074,7 +1142,7 @@ Make the string $content be the content for the file named $file.
 =item Version 0.20
 
 Added class methods for creation, extraction and listing of tar files.
-No longer maintain a complete copy of the tar file in memor.  Removed
+No longer maintain a complete copy of the tar file in memory.  Removed
 the C<data()> method.
 
 =item Version 0.10
@@ -1094,12 +1162,12 @@ Added proper support for MacOS.  Thanks to Paul J. Schinder
 
 Minor release.
 
-Arrange to chmod() at the very end in case it makes the file readonly.
+Arrange to chmod() at the very end in case it makes the file read only.
 Win32 is actually picky about that.
 
 SunOS 4.x tar makes tarfiles that contain directory entries that
 don\'t have typeflag set properly.  We use the trailing slash to
-recognize directories in such tarfiles.
+recognise directories in such tar files.
 
 =item Version 0.07
 
@@ -1109,7 +1177,7 @@ Schinder at Goddard Space Flight Center.
 Fixed two bugs with symlink handling, reported in excellent detail by
 an admin at teleport.com called Chris.
 
-Primitive tar program (called ptar) included with distribution. Useage
+Primitive tar program (called ptar) included with distribution. Usage
 should be pretty obvious if you\'ve used a normal tar program.
 
 Added methods get_content and replace_content.
