@@ -7,7 +7,7 @@ use strict;
 use vars qw[$DEBUG $error $VERSION $WARN $FOLLOW_SYMLINK];
 $DEBUG      = 0;
 $WARN       = 1;
-$VERSION    = "1.03";
+$VERSION    = "1.04";
 
 use IO::File;
 use Cwd;
@@ -742,11 +742,10 @@ sub _write_to_handle {
             $self->_error( qq[Could not write data for: ] . $entry->name ),
             return
         );
+        ### pad the end of the entry if required ###
+        print $handle TAR_PAD->( $entry->size ) if $entry->size % BLOCK;
     }         
-
-    ### pad the end of the entry if required ###
-    print $handle TAR_PAD->( $entry->size ) if $entry->size % BLOCK;
-
+    
     return 1;
 }
 

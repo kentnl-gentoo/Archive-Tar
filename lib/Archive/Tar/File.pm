@@ -207,6 +207,9 @@ sub _new_from_file {
     my $fh = new FileHandle;
     $fh->open("$path") or return undef;
     
+    ### binmode needed to read files properly on win32 ###
+    binmode $fh;
+   
     my ($prefix,$file) = $class->_prefix_and_file($path);
 
     my @items       = qw[mode uid gid size mtime];

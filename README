@@ -16,6 +16,13 @@ Archive::Tar will still work without IO::Zlib, it will just complain
 when you try to use a compressed archive or write one, since it 
 obviously can't. 
 
+* important changes in version 1.04 27/7/2003:
+
+This release hold a bugfix over the 1.03 release:
+-   NULL-byte padding was done also on files that had no real content,
+    like symlinks, thus ending up with a number of bytes not devidable
+    by 512.
+
 * important changes in version 1.03 26/6/2003:
 
 This release holds some bugfixes over the 1.02 release, mainly these:
