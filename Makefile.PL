@@ -21,7 +21,10 @@ WriteMakefile (
     NAME            => 'Archive::Tar',
     VERSION_FROM    => 'lib/Archive/Tar.pm', # finds $VERSION
     dist            => { COMPRESS => 'gzip -9f', SUFFIX => 'gz' },
-    PREREQ_PM       => { 'Test::More' => 0, 'File::Spec' => 0.82 },
+    PREREQ_PM       => {'Test::More' => 0, 
+                        'File::Spec' => 0.82,
+                        'Test::Harness' => 2.26, # there's a bug in older versions
+                    },
     AUTHOR          => 'Jos Boumans <kane[at]cpan.org>',
 	ABSTRACT        => 'Manipulates TAR archives'
 );             

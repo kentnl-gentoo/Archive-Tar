@@ -16,6 +16,14 @@ Archive::Tar will still work without IO::Zlib, it will just complain
 when you try to use a compressed archive or write one, since it 
 obviously can't. 
 
+* important changes in version 1.05 23/8/2003:
+
+This release holds some bugfixes and new features over the 1.04 release.
+-   The Test::Harness that came with perl 5.6.0 was buggy, require
+    a higher version in the Makefile.PL
+-   Add a global variable $CHOWN that controls whether Archive::Tar
+    should attempt to chown() files or not when it can.    
+
 * important changes in version 1.04 27/7/2003:
 
 This release hold a bugfix over the 1.03 release:

@@ -4,10 +4,12 @@ package Archive::Tar;
 require 5.005_03;
 
 use strict;
-use vars qw[$DEBUG $error $VERSION $WARN $FOLLOW_SYMLINK];
-$DEBUG      = 0;
-$WARN       = 1;
-$VERSION    = "1.04";
+use vars qw[$DEBUG $error $VERSION $WARN $FOLLOW_SYMLINK $CHOWN];
+$DEBUG          = 0;
+$WARN           = 1;
+$FOLLOW_SYMLINK = 0;
+$VERSION        = "1.05";
+$CHOWN          = 1;
 
 use IO::File;
 use Cwd;
@@ -409,7 +411,7 @@ sub _extract_file {
     utime time, $entry->mtime - TIME_OFFSET, $full or
         $self->_error( qq[Could not update timestamp] );
 
-    if( CAN_CHOWN ) {
+    if( $CHOWN && CAN_CHOWN ) {
         chown $entry->uid, $entry->gid, $full or
             $self->_error( qq[Could not set uid/gid on '$full'] );
     }
@@ -1022,6 +1024,15 @@ This option is checked when you write out the tarfile using C<write>
 or C<create_archive>.
 
 This works just like C</bin/tar>'s C<-h> option.
+
+=head2 $Archive::Tar::CHOWN
+
+By default, C<Archive::Tar> will try to C<chown> your files if it is
+able to. In some cases, this may not be desired. In that case, set 
+this variable to C<0> to disable C<chown>-ing, even if it were
+possible.
+
+The default is C<1>.
 
 =head2 $Archive::Tar::DEBUG
 
