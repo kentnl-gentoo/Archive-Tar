@@ -221,7 +221,7 @@ sub _new_from_file {
         name        => $file,
         chksum      => CHECK_SUM,
         type        => $type,         
-        linkname    => ($type == SYMLINK and CAN_READLINK) ? readlink $file : '',
+        linkname    => ($type == SYMLINK and CAN_READLINK) ? readlink $path : '',
         magic       => MAGIC,
         version     => TAR_VERSION,
         uname       => UNAME->( $hash{uid} ),
@@ -317,6 +317,17 @@ sub _filetype {
     return UNKNOWN;		            # Something else (like what?)
 
 }
+
+### this method 'downgrades' a file to plain file -- this is used for
+### symlinks when FOLLOW_SYMLINKS is true.
+sub _downgrade_to_plainfile {
+    my $entry = shift;
+    $entry->type( FILE );
+    $entry->mode( MODE );
+    $entry->linkname('');   
+
+    return 1;
+}    
 
 =head1 Methods
 

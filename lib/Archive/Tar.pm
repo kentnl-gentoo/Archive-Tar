@@ -4,10 +4,10 @@ package Archive::Tar;
 require 5.005_03;
 
 use strict;
-use vars qw[$DEBUG $error $VERSION $WARN];
+use vars qw[$DEBUG $error $VERSION $WARN $FOLLOW_SYMLINK];
 $DEBUG      = 0;
 $WARN       = 1;
-$VERSION    = "1.02";
+$VERSION    = "1.03";
 
 use IO::File;
 use Cwd;
@@ -714,6 +714,17 @@ sub _write_to_handle {
     my $entry   = shift or return;
     my $prefix  = shift || '';
     
+    ### if the file is a symlink, there are 2 options:
+    ### either we leave the symlink intact, but then we don't write any data
+    ### OR we follow the symlink, which means we actually make a copy.
+    ### if we do the latter, we have to change the TYPE of the entry to 'FILE'
+    my $symlink_ok =  $entry->is_symlink && $Archive::Tar::FOLLOW_SYMLINK;
+    my $content_ok = !$entry->is_symlink && $entry->has_content ;
+    
+    ### downgrade to a 'normal' file if it's a symlink we're going to treat
+    ### as a regular file
+    $entry->_downgrade_to_plainfile if $symlink_ok;
+    
     my $header = $self->_format_tar_entry( $entry, $prefix );
         
     unless( $header ) {
@@ -726,10 +737,7 @@ sub _write_to_handle {
         return
     );
     
-    ### i think this is safe for all types... --kane
-    ### possibly missing the binmode...
-    #if( length $entry->type and $entry->type == FILE ) {
-    if( $entry->has_content ) {
+    if( $symlink_ok or $content_ok ) {
         print $handle $entry->data or (
             $self->_error( qq[Could not write data for: ] . $entry->name ),
             return
@@ -1003,6 +1011,18 @@ sub extract_archive {
 __END__
 
 =head1 GLOBAL VARIABLES
+
+=head2 $Archive::Tar::FOLLOW_SYMLINK
+
+Set this variable to C<1> to make C<Archive::Tar> effectively make a
+copy of the file when extracting. Default this is set to C<0>, which
+means the symlink stays intact. Of course, you will have to pack the
+file linked to as well.
+
+This option is checked when you write out the tarfile using C<write> 
+or C<create_archive>.
+
+This works just like C</bin/tar>'s C<-h> option.
 
 =head2 $Archive::Tar::DEBUG
 

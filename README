@@ -16,6 +16,13 @@ Archive::Tar will still work without IO::Zlib, it will just complain
 when you try to use a compressed archive or write one, since it 
 obviously can't. 
 
+* important changes in version 1.03 26/6/2003:
+
+This release holds some bugfixes over the 1.02 release, mainly these:
+-   Always do a readlink on the full path, never just the file
+-   Make archive::tar write proper headers when dealing with symlinks
+    For this $Archive::Tar::FOLLOW_SYMLINKS is introduced
+
 * important changes in version 1.02 12/6/2003:
 
 This release holds some bugfixes over the 1.01 release, mainly these:
