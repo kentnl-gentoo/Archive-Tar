@@ -141,7 +141,8 @@ for my $type( $archive, $compressed ) {
 
 ### add files tests ###
 {
-    my @add = map { File::Spec->catfile( @root, @$_ ) } ['b'];
+    my @add     = map { File::Spec->catfile( @root, @$_ ) } ['b'];
+    my @addunix = map { File::Spec::Unix->catfile( @root, @$_ ) } ['b'];
 
     my @files = $tar->add_files( @add );
     is( scalar @files, scalar @add,                     "Adding files");
@@ -149,7 +150,7 @@ for my $type( $archive, $compressed ) {
     is( $files[0]->is_file, 1,                          "   Proper type" );
     like( $files[0]->get_content, qr/^bbbbbbbbbbb\s*$/, "   Content OK" );
     
-    for my $file ( @add ) {
+    for my $file ( @addunix ) {
         ok( $tar->contains_file($file), "   File found in archive" );
         
         my $rv = $tar->extract_file( $file, $file.$$ );

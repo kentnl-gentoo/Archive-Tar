@@ -199,7 +199,7 @@ sub clone {
 
 sub _new_from_chunk {
     my $class = shift;
-    my $chunk = shift or return undef;
+    my $chunk = shift or return;
     
     ### makes it start at 0 actually... :) ###
     my $i = -1;
@@ -238,13 +238,13 @@ sub _new_from_chunk {
 
 sub _new_from_file {
     my $class       = shift;
-    my $path        = shift or return undef;
+    my $path        = shift or return;
     my $type        = __PACKAGE__->_filetype($path);
     my $data        = '';
 
     unless ($type == DIR) {
         my $fh = IO::File->new;
-        $fh->open($path) or return undef;
+        $fh->open($path) or return;
         
         ### binmode needed to read files properly on win32 ###
         binmode $fh;
@@ -256,6 +256,7 @@ sub _new_from_file {
 
     my @items       = qw[mode uid gid size mtime];
     my %hash        = map { shift(@items), $_ } (lstat $path)[2,4,5,7,9];
+    $hash{size}     = 0 if $type == DIR;
     $hash{mtime}    -= TIME_OFFSET;
 
     ### probably requires some file path munging here ... ###
@@ -280,8 +281,8 @@ sub _new_from_file {
 
 sub _new_from_data {
     my $class   = shift;
-    my $path    = shift     or return undef;
-    my $data    = shift;    return undef unless defined $data;
+    my $path    = shift     or return;
+    my $data    = shift;    return unless defined $data;
     my $opt     = shift;
     
     my ($prefix,$file) = $class->_prefix_and_file($path);
@@ -336,7 +337,7 @@ sub _prefix_and_file {
     
 sub _filetype {
     my $self = shift;
-    my $file = shift or return undef;
+    my $file = shift or return;
 
     return SYMLINK  if (-l $file);	# Symlink
 
@@ -462,7 +463,7 @@ Returns true on success and false on failure.
 
 sub rename {
     my $self = shift;
-    my $path = shift or return undef;
+    my $path = shift or return;
     
     my ($prefix,$file) = $self->_prefix_and_file( $path );    
     

@@ -13,7 +13,7 @@ use vars qw[$DEBUG $error $VERSION $WARN $FOLLOW_SYMLINK $CHOWN $CHMOD
 $DEBUG              = 0;
 $WARN               = 1;
 $FOLLOW_SYMLINK     = 0;
-$VERSION            = "1.09";
+$VERSION            = "1.10";
 $CHOWN              = 1;
 $CHMOD              = 1;
 $DO_NOT_USE_PREFIX  = 0;
@@ -87,10 +87,12 @@ for my $key ( keys %$tmpl ) {
 }
 
 sub new {
+    my $class = shift;
+    $class = ref $class if ref $class;
 
     ### copying $tmpl here since a shallow copy makes it use the
     ### same aref, causing for files to remain in memory always.
-    my $obj = bless { _data => [ ], _file => 'Unknown' }, shift;
+    my $obj = bless { _data => [ ], _file => 'Unknown' }, $class;
 
     if (@_) {
         return unless $obj->read( @_ );
@@ -967,7 +969,7 @@ Returns a list of C<Archive::Tar::File> objects that were just added.
 
 sub add_files {
     my $self    = shift;
-    my @files   = @_ or return ();
+    my @files   = @_ or return;
     
     my @rv;
     for my $file ( @files ) {
@@ -1074,13 +1076,22 @@ requested by passing a value between 2 and 9 as the second argument.
 Any other value evaluating as true will result in the default
 compression level being used.
 
+Note that when you pass in a filehandle, the compression argument
+is ignored, as all files are printed verbatim to your filehandle.
+If you wish to enable compression with filehandles, use an
+C<IO::Zlib> filehandle instead.
+
 The remaining arguments list the files to be included in the tar file.
-These files must all exist.  Any files which don\'t exist or can\'t be
+These files must all exist. Any files which don't exist or can't be
 read are silently ignored.
 
 If the archive creation fails for any reason, C<create_archive> will
-return.  Please use the C<error> method to find the cause of the
+return false. Please use the C<error> method to find the cause of the
 failure.
+
+Note that this method does not write C<on the fly> as it were; it
+still reads all the files into memory before writing out the archive.
+Consult the FAQ below if this is a problem.
 
 =cut
 
@@ -1308,7 +1319,7 @@ Jos Boumans E<lt>kane@cpan.orgE<gt>.
 =head1 ACKNOWLEDGEMENTS
 
 Thanks to Sean Burke, Chris Nandor, Chip Salzenberg, Tim Heaney and
-Andrew Savige for their help and suggestions.
+especially Andrew Savige for their help and suggestions.
 
 =head1 COPYRIGHT
 
