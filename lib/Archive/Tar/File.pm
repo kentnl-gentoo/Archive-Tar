@@ -215,25 +215,13 @@ sub _new_from_chunk {
 
     ### store the original chunk ###
     $obj->raw( $chunk );
-
-    ### do some cleaning up ###
-    ### all paths are unix paths as per tar format spec ###
-    $obj->name( File::Spec::Unix->catfile( $obj->prefix, $obj->name ) ) if $obj->prefix;
-    
-    ### no reason to drop it, makes writing it out easier ###
-    #$obj->prefix('');
     
     $obj->type(FILE) if ( (!length $obj->type) or ($obj->type =~ /\W/) );
     $obj->type(DIR)  if ( ($obj->is_file) && ($obj->name =~ m|/$|) );    
 
-    ### weird thing in tarfiles -- if the file is actually a @LongLink,
-    ### the data part seems to have a trailing ^@ (unprintable) char.
-    ### to display, pipe output through less.
-    ### at any rate, we better remove that character here, or tests like
-    ### 'eq' and hashlook ups based on names will SO not work
-    $obj->size( $obj->size - 1 ) if $obj->is_longlink;
-             
+
     return $obj;
+    
 }
 
 sub _new_from_file {
@@ -252,31 +240,39 @@ sub _new_from_file {
         close $fh;
     }
 
-    my ($prefix,$file) = $class->_prefix_and_file($path);
-
     my @items       = qw[mode uid gid size mtime];
     my %hash        = map { shift(@items), $_ } (lstat $path)[2,4,5,7,9];
     $hash{size}     = 0 if $type == DIR;
     $hash{mtime}    -= TIME_OFFSET;
 
     ### probably requires some file path munging here ... ###
+    ### name and prefix are set later
     my $obj = {
         %hash,
-        name        => $file,
+        name        => '',
         chksum      => CHECK_SUM,
         type        => $type,         
-        linkname    => ($type == SYMLINK and CAN_READLINK) ? readlink $path : '',
+        linkname    => ($type == SYMLINK and CAN_READLINK) 
+                            ? readlink $path 
+                            : '',
         magic       => MAGIC,
         version     => TAR_VERSION,
         uname       => UNAME->( $hash{uid} ),
         gname       => GNAME->( $hash{gid} ),
         devmajor    => 0,   # not handled
         devminor    => 0,   # not handled
-        prefix      => $prefix,
+        prefix      => '',
         data        => $data,
     };      
 
-    return bless $obj, $class;
+    bless $obj, $class;
+
+    ### fix up the prefix and file from the path
+    my($prefix,$file) = $obj->_prefix_and_file( $path );
+    $obj->prefix( $prefix );
+    $obj->name( $file );
+    
+    return $obj;
 }
 
 sub _new_from_data {
@@ -285,11 +281,9 @@ sub _new_from_data {
     my $data    = shift;    return unless defined $data;
     my $opt     = shift;
     
-    my ($prefix,$file) = $class->_prefix_and_file($path);
-
     my $obj = {
         data        => $data,
-        name        => $file,
+        name        => '',
         mode        => MODE,
         uid         => UID,
         gid         => GID,
@@ -304,7 +298,7 @@ sub _new_from_data {
         gname       => GNAME->( GID ),
         devminor    => 0,
         devmajor    => 0,
-        prefix      => $prefix,
+        prefix      => '',
     };      
     
     ### overwrite with user options, if provided ###
@@ -317,20 +311,33 @@ sub _new_from_data {
         }
     }
 
-    return bless $obj, $class;
+    bless $obj, $class;
 
+    ### fix up the prefix and file from the path
+    my($prefix,$file) = $obj->_prefix_and_file( $path );
+    $obj->prefix( $prefix );
+    $obj->name( $file );
+    
+    return $obj;
 }
 
 sub _prefix_and_file {
     my $self = shift;
     my $path = shift;
     
-    my ($vol, $dirs, $file) = File::Spec->splitpath( $path );
-      
+    my ($vol, $dirs, $file) = File::Spec->splitpath( $path, $self->is_dir );
+    my @dirs = File::Spec->splitdir( $dirs );
+    
+    ### so sometimes the last element is '' -- probably when trailing
+    ### dir slashes are encountered... this is is of course pointless,
+    ### so remove it
+    pop @dirs while @dirs and not length $dirs[-1];
+
+    ### if it's a directory, then $file might be empty
+    $file = pop @dirs if $self->is_dir and not length $file;
+
     my $prefix = File::Spec::Unix->catdir(
-                        grep { length } 
-                        $vol,
-                        File::Spec->splitdir( $dirs ),
+                        grep { length } $vol, @dirs
                     );           
     return( $prefix, $file );
 }
@@ -370,6 +377,24 @@ sub _downgrade_to_plainfile {
 
     return 1;
 }    
+
+=head2 full_path
+
+Returns the full path from the tar header; this is basically a 
+concatenation of the C<prefix> and C<name> fields.
+
+=cut
+
+sub full_path {
+    my $self = shift;
+     
+    ### if prefix field is emtpy
+    return $self->name unless defined $self->prefix and length $self->prefix;
+    
+    ### or otherwise, catfile'd
+    return File::Spec::Unix->catfile( $self->prefix, $self->name ); 
+}
+
 
 =head2 validate
 

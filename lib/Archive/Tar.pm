@@ -13,12 +13,13 @@ use vars qw[$DEBUG $error $VERSION $WARN $FOLLOW_SYMLINK $CHOWN $CHMOD
 $DEBUG              = 0;
 $WARN               = 1;
 $FOLLOW_SYMLINK     = 0;
-$VERSION            = "1.10";
+$VERSION            = "1.20";
 $CHOWN              = 1;
 $CHMOD              = 1;
 $DO_NOT_USE_PREFIX  = 0;
 
 use IO::File;
+use IO::String;
 use Cwd;
 use Carp                qw(carp);
 use File::Spec          ();
@@ -145,7 +146,7 @@ C<Archive::Tar::File> objects in list context.
 
 sub read {
     my $self = shift;    
-    my $file = shift; $file = $self->_file unless defined $file;
+    my $file = shift; 
     my $gzip = shift || 0;
     my $opts = shift || {};
     
@@ -218,12 +219,15 @@ sub _read_tar {
     my $tarfile = [ ];
     my $chunk;
     my $read = 0;
-    my $real_name;  # to set the name of a file when we're encountering @longlink
+    my $real_name;  # to set the name of a file when 
+                    # we're encountering @longlink
     my $data;
          
     LOOP: 
     while( $handle->read( $chunk, HEAD ) ) {        
-        
+        ### IO::Zlib doesn't support this yet
+        my $offset = eval { tell $handle } || 'unknown';
+            
         unless( $read++ ) {
             my $gzip = GZIP_MAGIC_NUM;
             if( $chunk =~ /$gzip/ ) {
@@ -235,14 +239,14 @@ sub _read_tar {
         ### if we can't read in all bytes... ###
         last if length $chunk != HEAD;
         
-        # Apparently this should really be two blocks of 512 zeroes,
-	    # but GNU tar sometimes gets it wrong. See comment in the
-	    # source code (tar.c) to GNU cpio.
-        last if $chunk eq TAR_END; 
+        ### Apparently this should really be two blocks of 512 zeroes,
+	    ### but GNU tar sometimes gets it wrong. See comment in the
+	    ### source code (tar.c) to GNU cpio.
+        next if $chunk eq TAR_END;
         
         my $entry; 
         unless( $entry = Archive::Tar::File->new( chunk => $chunk ) ) {
-            $self->_error( qq[Couldn't read chunk '$chunk'] );
+            $self->_error( qq[Couldn't read chunk at offset $offset] );
             next;
         }
         
@@ -256,37 +260,45 @@ sub _read_tar {
                 $self->_error( $entry->name . qq[: checksum error] );
                 next LOOP;
             }
-          
-            ### part II of the @LongLink munging -- need to do /after/
-            ### the checksum check.
-
             
             my $block = BLOCK_SIZE->( $entry->size );
 
             $data = $entry->get_content_by_ref;
-#            while( $block ) {
-#                $handle->read( $data, $block ) or (
-#                    $self->_error( qq[Could not read block for ] . $entry->name ),
-#                    return
-#                );
-#                $block > BUFFER 
-#                    ? $block -= BUFFER
-#                    : last;   
-#                last if $block eq TAR_END;             
-#            }
             
             ### just read everything into memory 
             ### can't do lazy loading since IO::Zlib doesn't support 'seek'
-            ### this is because Compress::Zlib doesn't support it =/            
+            ### this is because Compress::Zlib doesn't support it =/ 
+            ### this reads in the whole data in one read() call.              
             if( $handle->read( $$data, $block ) < $block ) {
-                $self->_error( qq[Read error on tarfile ']. $entry->name ."'" );
+                $self->_error( qq[Read error on tarfile ']. 
+                                    $entry->full_path ."' at offset $offset" );
                 return;
             }
 
             ### throw away trailing garbage ###
             substr ($$data, $entry->size) = "";
+
+            ### part II of the @LongLink munging -- need to do /after/
+            ### the checksum check.
+            if( $entry->is_longlink ) {
+                ### weird thing in tarfiles -- if the file is actually a
+                ### @LongLink, the data part seems to have a trailing ^@ 
+                ### (unprintable) char. to display, pipe output through less.
+                ### but that doesn't *always* happen.. so check if the last 
+                ### character is a control character, and if so remove it
+                ### at any rate, we better remove that character here, or tests 
+                ### like 'eq' and hashlook ups based on names will SO not work
+                ### remove it by calculating the proper size, and then
+                ### tossing out everything that's longer than that size.
+    
+                ### count number of nulls 
+                my $nulls = $$data =~ tr/\0/\0/;
+
+                ### cut data + size by that many bytes
+                $entry->size( $entry->size - $nulls );
+                substr ($$data, $entry->size) = "";
+            }
         }
-        
         
         ### clean up of the entries.. posix tar /apparently/ has some
         ### weird 'feature' that allows for filenames > 255 characters
@@ -301,16 +313,20 @@ sub _read_tar {
             next;
         } elsif ( defined $real_name ) {
             $entry->name( $$real_name );
+            $entry->prefix('');
             undef $real_name;      
         }
 
-        $self->_extract_file( $entry )  if $extract && !$entry->is_longlink
-                                        && !$entry->is_unknown && !$entry->is_label;
+        $self->_extract_file( $entry ) if $extract 
+                                            && !$entry->is_longlink
+                                            && !$entry->is_unknown 
+                                            && !$entry->is_label;
         
         ### Guard against tarfiles with garbage at the end
 	    last LOOP if $entry->name eq ''; 
     
-        ### push only the name on the rv if we're extracting -- for extract_archive
+        ### push only the name on the rv if we're extracting 
+        ### -- for extract_archive
         push @$tarfile, ($extract ? $entry->name : $entry);
     
         if( $limit ) {
@@ -364,32 +380,52 @@ Returns a list of filenames extracted.
 
 sub extract {
     my $self    = shift;
-    my @files   = @_ ? @_ : $self->list_files;
+    my @files;
 
+    ### you requested the extraction of only certian files
+    if( @_ ) { 
+        for my $file (@_) {
+            my $found;
+            for my $entry ( @{$self->_data} ) {
+                next unless $file eq $entry->full_path;
+     
+                ### we found the file you're looking for           
+                push @files, $entry;
+                $found++;
+            }
+            
+            unless( $found ) {
+                return $self->_error( qq[Could not find '$file' in archive] );
+            }
+        }       
+    
+    ### just grab all the file items
+    } else {
+        @files = $self->get_files;
+    }       
+     
+    ### nothing found? that's an error 
     unless( scalar @files ) {
         $self->_error( qq[No files found for ] . $self->_file );
         return;
     }
-    
-    for my $file ( @files ) {
-        for my $entry ( @{$self->_data} ) {
-            next unless $file eq $entry->name;
-    
-            unless( $self->_extract_file( $entry ) ) {
-                $self->_error( qq[Could not extract '$file'] );
-                return;
-            }        
-        }
+
+    ### now extract them    
+    for my $entry ( @files ) {
+        unless( $self->_extract_file( $entry ) ) {
+            $self->_error(q[Could not extract ']. $entry->full_path .q['] );
+            return;
+        }        
     }
          
     return @files;        
 }
 
-=head2 $tar->extract_file( $file, [$extract_path )
+=head2 $tar->extract_file( $file, [$extract_path] )
 
 Write an entry, whose name is equivalent to the file name provided to
-disk. Optionally takes a second parameter, which is the full path
-(including filename) the entry will be written to.
+disk. Optionally takes a second parameter, which is the full (unix) 
+path (including filename) the entry will be written to.
 
 For example:
     
@@ -417,16 +453,23 @@ sub _extract_file {
     my $cwd     = cwd();
 
     ### you wanted an alternate extraction location ###
-    my $name = defined $alt ? $alt : $entry->name;
+    my $name = defined $alt ? $alt : $entry->full_path;
     
                             ### splitpath takes a bool at the end to indicate
                             ### that it's splitting a dir    
-    my ($vol,$dirs,$file)   = File::Spec::Unix->splitpath(  $name,
+    my ($vol,$dirs,$file) = File::Spec::Unix->splitpath(    $name, 
                                                             $entry->is_dir );
-    my @dirs                = File::Spec::Unix->splitdir( $dirs );
-    my @cwd                 = File::Spec->splitdir( $cwd );
-    my $dir                 = File::Spec->catdir(@cwd, @dirs);               
-
+    my $dir;
+    ### is $name an absolute path? ###
+    if( File::Spec->file_name_is_absolute( $name ) ) {
+        $dir = $name;
+  
+    ### it's a relative path ###
+    } else {      
+        my @dirs    = File::Spec::Unix->splitdir( $dirs );
+        my @cwd     = File::Spec->splitdir( $cwd );
+        $dir        = File::Spec->catdir(@cwd, @dirs);               
+    }
    
     if( -e $dir && !-d _ ) {
         $^W && $self->_error( qq['$dir' exists, but it's not a directory!\n] );
@@ -612,7 +655,9 @@ sub list_files {
         
         ### this does the same as the above.. just needs a +{ }
         ### to make sure perl doesn't confuse it for a block
-        return map { my $o=$_; +{ map { $_ => $o->$_() } @$aref } } @{$self->_data}; 
+        return map {    my $o=$_; 
+                        +{ map { $_ => $o->$_() } @$aref } 
+                    } @{$self->_data}; 
     }    
 }
 
@@ -626,9 +671,7 @@ sub _find_entry {
     }
     
     for my $entry ( @{$self->_data} ) {
-        my $path = File::Spec::Unix->catfile(
-                        grep { length } $entry->prefix, $entry->name
-                    );
+        my $path = $entry->full_path;
         return $entry if $path eq $file;      
     }
     
@@ -719,7 +762,7 @@ sub remove {
     my $self = shift;
     my @list = @_;
     
-    my %seen = map { $_->name => $_ } @{$self->_data};
+    my %seen = map { $_->full_path => $_ } @{$self->_data};
     delete $seen{ $_ } for @list;
     
     $self->_data( [values %seen] );
@@ -753,6 +796,11 @@ GLOB reference). If the second argument is true, the module will use
 IO::Zlib to write the file in a compressed format.  If IO::Zlib is 
 not available, the C<write> method will fail and return.
 
+Note that when you pass in a filehandle, the compression argument
+is ignored, as all files are printed verbatim to your filehandle.
+If you wish to enable compression with filehandles, use an
+C<IO::Zlib> filehandle instead.
+
 Specific levels of compression can be chosen by passing the values 2
 through 9 as the second parameter.
 
@@ -769,7 +817,7 @@ archive into a socket or a pipe to gzip or something.
 
 sub write {
     my $self        = shift;
-    my $file        = shift; $file   = '' unless defined $file;
+    my $file        = shift; $file = '' unless defined $file;
     my $gzip        = shift || 0;
     my $ext_prefix  = shift; $ext_prefix = '' unless defined $ext_prefix;
 
@@ -777,124 +825,120 @@ sub write {
     my $handle = length($file)
                     ? ( $self->_get_handle($file, $gzip, WRITE_ONLY->($gzip) ) 
                         or return )
-                    : '';       
+                    : IO::String->new;  
 
-    my @rv;
     for my $entry ( @{$self->_data} ) {
         ### entries to be written to the tarfile ###
         my @write_me;
+ 
+        ### only now will we change the object to reflect the current state
+        ### of the name and prefix fields -- this needs to be limited to
+        ### write() only!
+        my $clone = $entry->clone;
+
+
+        ### so, if you don't want use to use the prefix, we'll stuff everything
+        ### in the name field instead
+        if( $DO_NOT_USE_PREFIX ) {
+
+            ### you might have an extended prefix, if so, set it in the clone
+            ### XXX is ::Unix right?
+            $clone->name( length $ext_prefix
+                            ? File::Spec::Unix->catdir( $ext_prefix, 
+                                                        $clone->full_path) 
+                            : $clone->full_path );
+            $clone->prefix( '' );
+
+        ### otherwise, we'll have to set it properly -- prefix part in the
+        ### prefix and name part in the name field.
+        } else {
+        
+            ### split them here, not before!
+            my ($prefix,$name) = $clone->_prefix_and_file( $clone->full_path );
+    
+            ### you might have an extended prefix, if so, set it in the clone
+            ### XXX is ::Unix right?
+            $prefix = File::Spec::Unix->catdir( $ext_prefix, $prefix )
+                if length $ext_prefix;
+
+            $clone->prefix( $prefix );
+            $clone->name( $name );
+        }
      
         ### names are too long, and will get truncated if we don't add a
         ### '@LongLink' file...
-        my $make_longlink = (   (length($entry->name) + length($entry->prefix) >
-                                NAME_LENGTH) && $DO_NOT_USE_PREFIX ) ||
-                            (   length($entry->name)    > NAME_LENGTH or 
-                                length($entry->prefix)  > PREFIX_LENGTH ) ||
-                            0;       
+        my $make_longlink = (   length($clone->name)    > NAME_LENGTH or 
+                                length($clone->prefix)  > PREFIX_LENGTH 
+                            ) || 0;       
 
+        ### perhaps we need to make a longlink file?
         if( $make_longlink ) {
             my $longlink = Archive::Tar::File->new( 
                             data => LONGLINK_NAME, 
-                            File::Spec::Unix->catfile( 
-                                grep { length } $entry->prefix, $entry->name ),
+                            $clone->full_path,
                             { type => LONGLINK }
                         );
                         
             unless( $longlink ) {
                 $self->_error(  qq[Could not create 'LongLink' entry for ] .
-                                qq[oversize file '] . $entry->name ."'" );
+                                qq[oversize file '] . $clone->full_path ."'" );
                 return;
             };                      
     
-            push @write_me, [   $longlink, 
-                                qq[Could not write 'LongLink' entry for ]  . 
-                                qq[oversize file '] .  $entry->name ."'"];   
+            push @write_me, $longlink;
         }
     
-        ### add prefix OR longlink -- never both ###
-        {   my $no_prefix = $make_longlink ? 1 : 0;
-            push @write_me, [   $entry, $no_prefix,
-                                qq[Could not write entry '] . $entry->name . 
-                                qq[' to archive] ]; 
-        }
-        
-        for my $aref (@write_me) {
-            my ($w_entry, $no_prefix, $error_msg) = @$aref;
+        push @write_me, $clone;
 
-            if( length $file ) {
-                unless( $self->_write_to_handle( 
-                                $handle, $w_entry, $ext_prefix, $no_prefix )
-                ) {
-                    $self->_error( $error_msg );
-                    return;          
-                }
-                
-            } else {
-                    push @rv, $self->_format_tar_entry( 
-                                        $w_entry, $ext_prefix, $no_prefix );
-                    push @rv, $w_entry->data            
-                                        if  $w_entry->has_content;
-                    push @rv, TAR_PAD->( $w_entry->size )  
-                                        if  $w_entry->has_content &&
-                                            $w_entry->size % BLOCK;
+        ### write the one, optionally 2 a::t::file objects to the handle 
+        for my $clone (@write_me) { 
+ 
+            ### if the file is a symlink, there are 2 options:
+            ### either we leave the symlink intact, but then we don't write any
+            ### data OR we follow the symlink, which means we actually make a 
+            ### copy. if we do the latter, we have to change the TYPE of the
+            ### clone to 'FILE'
+            my $link_ok =  $clone->is_symlink && $Archive::Tar::FOLLOW_SYMLINK;
+            my $data_ok = !$clone->is_symlink && $clone->has_content;
+
+            ### downgrade to a 'normal' file if it's a symlink we're going to
+            ### treat as a regular file
+            $clone->_downgrade_to_plainfile if $link_ok;        
+
+            ### get the header for this block
+            my $header = $self->_format_tar_entry( $clone );
+            unless( $header ) {
+                $self->_error(q[Could not format header for: ] . 
+                                    $clone->full_path );
+                return;
+            }      
+
+            unless( print $handle $header ) {
+                $self->_error(q[Could not write header for: ] . 
+                                    $clone->full_path);
+                return;
             }
-        }
-    }
-    
-    if( length($file) ) {    
-        print $handle TAR_END x 2 or (
-            $self->_error( qq[Could not write tar end markers] ),
-            return
-        );
-    } else {
-        push @rv, TAR_END x 2;
-    }
-    
-    return length($file) ? 1 : join '', @rv;
-}
-
-sub _write_to_handle {
-    my $self        = shift;
-    my $handle      = shift or return;
-    my $entry       = shift or return;
-    my $ext_prefix  = shift; $ext_prefix = '' unless defined $ext_prefix;
-    my $no_prefix   = shift || 0;
-    
-    ### if the file is a symlink, there are 2 options:
-    ### either we leave the symlink intact, but then we don't write any data
-    ### OR we follow the symlink, which means we actually make a copy.
-    ### if we do the latter, we have to change the TYPE of the entry to 'FILE'
-    my $symlink_ok =  $entry->is_symlink && $Archive::Tar::FOLLOW_SYMLINK;
-    my $content_ok = !$entry->is_symlink && $entry->has_content ;
-    
-    ### downgrade to a 'normal' file if it's a symlink we're going to treat
-    ### as a regular file
-    $entry->_downgrade_to_plainfile if $symlink_ok;
-    
-    my $header = $self->_format_tar_entry( $entry, $ext_prefix, $no_prefix );
         
-    unless( $header ) {
-        $self->_error( qq[Could not format header for entry: ] . $entry->name );
-        return;
-    }      
+            if( $link_ok or $data_ok ) {
+                unless( print $handle $clone->data ) {
+                    $self->_error(q[Could not write data for: ] . 
+                                    $clone->full_path);
+                    return;
+                }
 
-    print $handle $header or (
-        $self->_error( qq[Could not write header for: ] . $entry->name ),
-        return
-    );
-    
-    if( $symlink_ok or $content_ok ) {
-        print $handle $entry->data or (
-            $self->_error( qq[Could not write data for: ] . $entry->name ),
-            return
-        );
-        ### pad the end of the entry if required ###
-        print $handle TAR_PAD->( $entry->size ) if $entry->size % BLOCK;
-    }         
-    
-    return 1;
+                ### pad the end of the clone if required ###
+                print $handle TAR_PAD->( $clone->size ) if $clone->size % BLOCK
+            }
+       
+        } ### done writing these entries
+    }
+        
+    ### write the end markers ###   
+    print $handle TAR_END x 2 or
+            return $self->_error( qq[Could not write tar end markers] );
+    ### did you want it written to a file, or returned as a string? ###
+    return length($file) ? 1 : do { seek $handle, 0, 0; local $/; <$handle> }
 }
-
 
 sub _format_tar_entry {
     my $self        = shift;

@@ -27,15 +27,21 @@ if( $opts->{c} ) {
                 print $File::Find::name.$/ if $verbose }, @ARGV );
                 
     Archive::Tar->create_archive( $file, $compress, @files );              
-    
-} elsif( $opts->{t} ) {
-    print map { $_.$/ } Archive::Tar->list_archive($file, $compress);    
+    exit;
+} 
+
+my $tar = Archive::Tar->new($file, $compress);
+
+if( $opts->{t} ) {
+    print map { $_->full_path . $/ } $tar->get_files; 
 
 } elsif( $opts->{x} ) {    
-    print map { $_.$/ } Archive::Tar->list_archive($file, $compress)
+    print map { $_->full_path . $/ } $tar->get_files
         if $verbose;
     Archive::Tar->extract_archive($file, $compress);
 }    
+
+
 
 sub usage {
     qq[
