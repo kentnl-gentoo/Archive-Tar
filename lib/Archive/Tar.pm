@@ -7,7 +7,7 @@ use strict;
 use vars qw[$DEBUG $error $VERSION $WARN];
 $DEBUG      = 0;
 $WARN       = 1;
-$VERSION    = "1.01";
+$VERSION    = "1.02";
 
 use IO::File;
 use Cwd;
@@ -19,21 +19,6 @@ use File::Path ();
 
 use Archive::Tar::File;
 use Archive::Tar::Constant;
-
-my $tmpl = {
-    _data   => [ ],
-    _file   => 'Unknown',
-};    
-
-### install get/set accessors for this object.
-for my $key ( keys %$tmpl ) {
-    no strict 'refs';
-    *{__PACKAGE__."::$key"} = sub {
-        my $self = shift;
-        $self->{$key} = $_[0] if @_;
-        return $self->{$key};
-    }
-}
 
 =head1 NAME
 
@@ -78,8 +63,26 @@ for any reason, C<new()> returns undef.
 
 =cut
 
+my $tmpl = {
+    _data   => [ ],
+    _file   => 'Unknown',
+};    
+
+### install get/set accessors for this object.
+for my $key ( keys %$tmpl ) {
+    no strict 'refs';
+    *{__PACKAGE__."::$key"} = sub {
+        my $self = shift;
+        $self->{$key} = $_[0] if @_;
+        return $self->{$key};
+    }
+}
+
 sub new {
-    my $obj = bless { %$tmpl }, shift;
+
+    ### copying $tmpl here since a shallow copy makes it use the
+    ### same aref, causing for files to remain in memory always.
+    my $obj = bless { _data => [ ], _file => 'Unknown' }, shift;
 
     $obj->read( @_ ) if @_;
     

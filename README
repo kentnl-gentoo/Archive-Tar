@@ -16,6 +16,17 @@ Archive::Tar will still work without IO::Zlib, it will just complain
 when you try to use a compressed archive or write one, since it 
 obviously can't. 
 
+* important changes in version 1.02 12/6/2003:
+
+This release holds some bugfixes over the 1.01 release, mainly these:
+-   Silly thinko fix in File.pm
+-   Quell some warnings if files are empty
+-   The cache of previously added files was not being emtpied
+
+Also, some new features are added:
+
+-   Archive::Tar::File objects now have a C<has_content> method.
+
 * important changes in version 1.01 5/6/2003:
 
 This release holds some bugfixes over the 1.00 release, mainly these:

@@ -392,7 +392,7 @@ Returns true on success, false on failure.
 
 sub replace_content {
     my $self = shift;
-    my $data = shift or '';
+    my $data = shift || '';
     
     $self->data( $data );
     $self->size( length $data );

@@ -87,6 +87,13 @@ for my $type( $archive, $compressed ) {
     is( $files[0]->name, 'b',                           "   Proper name" );
     is( $files[0]->is_file, 1,                          "   Proper type" );
     like( $files[0]->get_content, qr/^bbbbbbbbbbb\s*$/, "   Content OK" );
+
+
+    my $t2      = Archive::Tar->new;
+    my @added   = $t2->add_files($0);
+    my @count   = $t2->list_files;
+    is( scalar @added, 1,               "Added files to secondary archive" );
+    is( scalar @added, scalar @count,   "   Files do not conflict with primary archive" );
 }
 
 {
