@@ -12,14 +12,13 @@ use vars qw[$DEBUG $error $VERSION $WARN $FOLLOW_SYMLINK $CHOWN $CHMOD];
 $DEBUG          = 0;
 $WARN           = 1;
 $FOLLOW_SYMLINK = 0;
-$VERSION        = "1.07";
+$VERSION        = "1.08";
 $CHOWN          = 1;
 $CHMOD          = 1;
 
 use IO::File;
 use Cwd;
 use Carp qw(carp);
-use FileHandle;
 use File::Spec ();
 use File::Spec::Unix ();
 use File::Path ();
@@ -140,18 +139,18 @@ C<Archive::Tar::File> objects in list context.
 
 sub read {
     my $self = shift;    
-    my $file = shift || $self->_file;
+    my $file = shift; $file = $self->_file unless defined $file;
     my $gzip = shift || 0;
     my $opts = shift || {};
     
     unless( defined $file ) {
-        $self->error( qq[No file to read from!] );
+        $self->_error( qq[No file to read from!] );
         return;
     } else {
         $self->_file( $file );
     }     
     
-    my $handle = $self->_get_handle($file, $gzip, READ_ONLY->($gzip) ) 
+    my $handle = $self->_get_handle($file, $gzip, READ_ONLY->( ZLIB ) ) 
                     or return;
 
     my $data = $self->_read_tar( $handle, $opts ) or return;
@@ -167,7 +166,7 @@ sub _get_handle {
                         return $file if ref $file;
                         
     my $gzip = shift || 0;
-    my $mode = shift || READ_ONLY->($gzip); # default to read only
+    my $mode = shift || READ_ONLY->( ZLIB ); # default to read only
     
     my $fh; my $bin;
     
@@ -424,7 +423,7 @@ sub _extract_file {
     }
     
     if( length $entry->type && $entry->is_file ) {
-        my $fh = new FileHandle;
+        my $fh = IO::File->new;
         $fh->open( '>' . $full ) or (
             $self->_error( qq[Could not open file '$full': $!] ),
             return
@@ -564,7 +563,7 @@ provided. If no filename list was passed, all C<Archive::Tar::File>
 objects in the current Tar object are returned.
 
 Please refer to the C<Archive::Tar::File> documentation on how to 
-handle these objects
+handle these objects.
 
 =cut
 
@@ -690,12 +689,12 @@ archive into a socket or a pipe to gzip or something.
 
 sub write {
     my $self    = shift;
-    my $file    = shift || '';
+    my $file    = shift; $file   = '' unless defined $file;
     my $gzip    = shift || 0;
-    my $prefix  = shift || '';
+    my $prefix  = shift; $prefix = '' unless defined $prefix;
 
     ### only need a handle if we have a file to print to ###
-    my $handle = $file 
+    my $handle = length($file)
                     ? ( $self->_get_handle($file, $gzip, WRITE_ONLY->($gzip) ) 
                         or return )
                     : '';       
@@ -720,7 +719,7 @@ sub write {
             };                      
     
     
-            if( $file ) {
+            if( length($file) ) {
                 unless( $self->_write_to_handle( $handle, $longlink, $prefix ) ) {
                     $self->_error( qq[Could not write 'LongLink' entry for oversize file '] .  $entry->name ."'" );
                     return; 
@@ -733,7 +732,7 @@ sub write {
             }     
         }        
  
-        if( $file ) {
+        if( length($file) ) {
             unless( $self->_write_to_handle( $handle, $entry, $prefix ) ) {
                 $self->_error( qq[Could not write entry '] . $entry->name . qq[' to archive] );
                 return;          
@@ -746,7 +745,7 @@ sub write {
         }
     }
     
-    if( $file ) {    
+    if( length($file) ) {    
         print $handle TAR_END x 2 or (
             $self->_error( qq[Could not write tar end markers] ),
             return
@@ -755,14 +754,14 @@ sub write {
         push @rv, TAR_END x 2;
     }
     
-    return $file ? 1 : join '', @rv;
+    return length($file) ? 1 : join '', @rv;
 }
 
 sub _write_to_handle {
     my $self    = shift;
     my $handle  = shift or return;
     my $entry   = shift or return;
-    my $prefix  = shift || '';
+    my $prefix  = shift; $prefix = '' unless defined $prefix;
     
     ### if the file is a symlink, there are 2 options:
     ### either we leave the symlink intact, but then we don't write any data
@@ -803,17 +802,20 @@ sub _write_to_handle {
 sub _format_tar_entry {
     my $self        = shift;
     my $entry       = shift or return;
-    my $ext_prefix  = shift || '';
+    my $ext_prefix  = shift; $ext_prefix = '' unless defined $ext_prefix;
 
     my $file    = $entry->name;
-    my $prefix  = $entry->prefix || '';
+    my $prefix  = $entry->prefix; $prefix = '' unless defined $prefix;
     my $match   = quotemeta $prefix;
     
-    ### remove the prefix from the file name ###
-    ### not sure if this is still neeeded --kane ###
-    if( length $prefix ) {
-        $file =~ s/^$match//;
-    } 
+    ### remove the prefix from the file name 
+    ### not sure if this is still neeeded --kane
+    ### no it's not -- Archive::Tar::File->_new_from_file will take care of
+    ### this for us. Even worse, this would break if we tried to add a file
+    ### like x/x. 
+    #if( length $prefix ) {
+    #    $file =~ s/^$match//;
+    #} 
     
     $prefix = File::Spec::Unix->catdir($ext_prefix, $prefix) if length $ext_prefix;
     
@@ -854,7 +856,7 @@ sub _format_tar_entry {
 Takes a list of filenames and adds them to the in-memory archive.  
 
 The path to the file is automatically converted to a Unix like
-equivalent for use in the archive, and, if on MacOs, the file's 
+equivalent for use in the archive, and, if on MacOS, the file's 
 modification time is converted from the MacOS epoch to the Unix epoch.
 So tar archives created on MacOS with B<Archive::Tar> can be read 
 both with I<tar> on Unix and applications like I<suntar> or 
@@ -930,7 +932,7 @@ Returns the current errorstring (usually, the last error reported).
 If a true value was specified, it will give the C<Carp::longmess> 
 equivalent of the error, in effect giving you a stacktrace.
 
-For backwards compabillity, this error is also available as 
+For backwards compatibility, this error is also available as 
 C<$Archive::Tar::error> allthough it is much recommended you use the
 method call instead.
 
@@ -971,7 +973,7 @@ reference to an open file handle (e.g. a GLOB reference).
 
 The second argument specifies the level of compression to be used, if
 any.  Compression of tar files requires the installation of the
-IO::Zlib module.  Specific levels or compression may be
+IO::Zlib module.  Specific levels of compression may be
 requested by passing a value between 2 and 9 as the second argument.
 Any other value evaluating as true will result in the default
 compression level being used.
@@ -1005,10 +1007,10 @@ sub create_archive {
 =head2 Archive::Tar->list_archive ($file, $compressed, [\@properties])
 
 Returns a list of the names of all the files in the archive.  The
-first argument can either be the name of the tar file to create or a
+first argument can either be the name of the tar file to list or a
 reference to an open file handle (e.g. a GLOB reference).
 
-If C<list_archive()> is passed an array reference as its second
+If C<list_archive()> is passed an array reference as its third
 argument it returns a list of hash references containing the requested
 properties of each file.  The following list of properties is
 supported: name, size, mtime (last modified date), mode, uid, gid,
@@ -1064,7 +1066,7 @@ __END__
 =head2 $Archive::Tar::FOLLOW_SYMLINK
 
 Set this variable to C<1> to make C<Archive::Tar> effectively make a
-copy of the file when extracting. Default this is set to C<0>, which
+copy of the file when extracting. Default is C<0>, which
 means the symlink stays intact. Of course, you will have to pack the
 file linked to as well.
 
@@ -1111,7 +1113,7 @@ Defaults to C<1>.
 
 =head2 $Archive::Tar::error
 
-Holds the last reported error. Kept for historical reasons, but it's
+Holds the last reported error. Kept for historical reasons, but its
 use is very much discouraged. Use the C<error()> method instead:
 
     warn $tar->error unless $tar->extract;
@@ -1132,7 +1134,7 @@ C</bin/tar> instead.
 
 =item Isn't Archive::Tar heavier on memory than /bin/tar?
 
-Yes it is, see previous answer. Since C<Compress::Zlib> and therefor
+Yes it is, see previous answer. Since C<Compress::Zlib> and therefore
 C<IO::Zlib> doesn't support C<seek> on their filehandles, there is little
 choice but to read the archive into memory. 
 This is ok if you want to do in-memory manipulation of the archive.
@@ -1169,8 +1171,8 @@ Jos Boumans E<lt>kane@cpan.orgE<gt>.
 
 =head1 ACKNOWLEDGEMENTS
 
-Thanks to Sean Burke, Chris Nandor, Chip Salzenberg and Tim Heaney 
-for their help and suggestions.
+Thanks to Sean Burke, Chris Nandor, Chip Salzenberg, Tim Heaney and
+Andrew Savige for their help and suggestions.
 
 =head1 COPYRIGHT
 

@@ -1,6 +1,7 @@
 package Archive::Tar::File;
 use strict;
 
+use IO::File;
 use File::Spec::Unix ();
 use File::Spec ();
 use File::Basename ();
@@ -56,13 +57,13 @@ Archive::Tar::File - a subclass for in-memory extracted file from Archive::Tar
 
 =head1 SYNOPSIS
 
-    my @tiems = $tar->get_files;
-    
+    my @items = $tar->get_files;
+
     print $_->name, ' ', $_->size, "\n" for @items;
 
     print $object->get_content;
     $object->replace_content('new content');
-    
+
     $object->rename( 'new/full/path/to/file.c' );
 
 =head1 DESCRIPTION
@@ -118,11 +119,11 @@ If the file is a symlink, the file it's pointing to
 
 =item magic
 
-Tar magic string -- not usefull for most users
+Tar magic string -- not useful for most users
 
 =item version
 
-Tar version string -- not usefull for most users
+Tar version string -- not useful for most users
 
 =item uname
 
@@ -146,9 +147,35 @@ Any directory to prefix to the extraction path, if any
 
 =item raw
 
-Raw tar header -- not usefull for most users
+Raw tar header -- not useful for most users
 
 =back
+
+=head1 Methods
+
+=head2 new( file => $path )
+
+Returns a new Archive::Tar::File object from an existing file.
+
+Returns undef on failure.
+
+=head2 new( data => $path, $data, $opt )
+
+Returns a new Archive::Tar::File object from data.
+
+C<$path> defines the file name (which need not exist), C<$data> the
+file contents, and C<$opt> is a reference to a hash of attributes
+which may be used to override the default attributes (fields in the
+tar header), which are described above in the Accessors section.
+
+Returns undef on failure.
+
+=head2 new( chunk => $chunk )
+
+Returns a new Archive::Tar::File object from a raw 512-byte tar
+archive chunk.
+
+Returns undef on failure.
 
 =cut
 
@@ -191,14 +218,13 @@ sub _new_from_chunk {
     #$obj->prefix('');
     
     $obj->type(FILE) if ( (!length $obj->type) or ($obj->type =~ /\W/) );
-
-    $obj->type(DIR) if ( ($obj->is_file) && ($obj->name =~ m|/$|) );    
+    $obj->type(DIR)  if ( ($obj->is_file) && ($obj->name =~ m|/$|) );    
 
     ### weird thing in tarfiles -- if the file is actually a @LongLink,
     ### the data part seems to have a trailing ^@ (unprintable) char.
     ### to display, pipe output through less.
     ### at any rate, we better remove that character here, or tests like
-    ### 'eq' and hashlook ups bases on names will SO not work
+    ### 'eq' and hashlook ups based on names will SO not work
     $obj->size( $obj->size - 1 ) if $obj->is_longlink;
              
     return $obj;
@@ -207,21 +233,25 @@ sub _new_from_chunk {
 sub _new_from_file {
     my $class       = shift;
     my $path        = shift or return undef;
+    my $type        = __PACKAGE__->_filetype($path);
+    my $data        = '';
 
-    my $fh = new FileHandle;
-    $fh->open("$path") or return undef;
-    
-    ### binmode needed to read files properly on win32 ###
-    binmode $fh;
-   
+    unless ($type == DIR) {
+        my $fh = IO::File->new;
+        $fh->open($path) or return undef;
+        
+        ### binmode needed to read files properly on win32 ###
+        binmode $fh;
+        $data = do { local $/; <$fh> };
+        close $fh;
+    }
+
     my ($prefix,$file) = $class->_prefix_and_file($path);
 
     my @items       = qw[mode uid gid size mtime];
     my %hash        = map { shift(@items), $_ } (lstat $path)[2,4,5,7,9];
     $hash{mtime}    -= TIME_OFFSET;
 
-    my $type        = __PACKAGE__->_filetype($path);
-    
     ### probably requires some file path munging here ... ###
     my $obj = {
         %hash,
@@ -236,11 +266,9 @@ sub _new_from_file {
         devmajor    => 0,   # not handled
         devminor    => 0,   # not handled
         prefix      => $prefix,
-        data        => scalar do { local $/; <$fh> },
+        data        => $data,
     };      
 
-    close $fh;
-    
     return bless $obj, $class;
 }
 
@@ -277,8 +305,8 @@ sub _new_from_data {
         for my $key ( keys %$opt ) {
             
             ### don't write bogus options ###
-            next unless exists $obj->{key};
-            $obj->{$key} = $opt->{key};
+            next unless exists $obj->{$key};
+            $obj->{$key} = $opt->{$key};
         }
     }
 
@@ -335,8 +363,6 @@ sub _downgrade_to_plainfile {
 
     return 1;
 }    
-
-=head1 Methods
 
 =head2 validate
 
@@ -401,7 +427,7 @@ sub get_content_by_ref {
 =head2 replace_content( $content )
 
 Replace the current content of the file with the new content. This
-only affects the in-memory archive, not the on-disk version untill
+only affects the in-memory archive, not the on-disk version until
 you write it. 
 
 Returns true on success, false on failure.
@@ -434,7 +460,7 @@ sub rename {
     
     my ($prefix,$file) = $self->_prefix_and_file( $path );    
     
-    $self->name( $path );
+    $self->name( $file );
     $self->prefix( $prefix );
 
 	return 1;

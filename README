@@ -16,6 +16,18 @@ Archive::Tar will still work without IO::Zlib, it will just complain
 when you try to use a compressed archive or write one, since it 
 obviously can't. 
 
+A snapshot of the latest development version of Archive::Tar may be 
+optained at: http://p4.elixus.org/snap/Archive-Tar.tar.gz
+
+* important changes in version 1.08 5/1/2004:
+
+This release holds some bugfixes and extra tests over the 1.07 release:
+-   Fix a file renaming bug that forgot to carry over path info
+-   Fix a bug where adding dirs on win32 gave 'permission denied'
+-   Fix some documentation typos
+-   Add extra tests explicilty for Archive::Tar::File
+-   Move completely from FileHandle to IO::File
+
 * important changes in version 1.07 17/10/2003:
 
 This release holds some bugfixes over the 1.06 release:
