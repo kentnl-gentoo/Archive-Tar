@@ -19,6 +19,13 @@ obviously can't.
 A snapshot of the latest development version of Archive::Tar may be 
 optained at: http://p4.elixus.org/snap/Archive-Tar.tar.gz
 
+* important changes in version 1.22 21/11/2004:
+
+This release holds only bugfixes.
+-   Make list_files() also return full_path() rather than name(),
+    as that would ignore the prefix field. This was found to break
+    PPM (bug #8537)
+
 * important changes in version 1.21 9/11/2004:
 
 This release holds only bugfixes.

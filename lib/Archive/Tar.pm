@@ -13,7 +13,7 @@ use vars qw[$DEBUG $error $VERSION $WARN $FOLLOW_SYMLINK $CHOWN $CHMOD
 $DEBUG              = 0;
 $WARN               = 1;
 $FOLLOW_SYMLINK     = 0;
-$VERSION            = "1.21";
+$VERSION            = "1.22";
 $CHOWN              = 1;
 $CHMOD              = 1;
 $DO_NOT_USE_PREFIX  = 0;
@@ -124,7 +124,7 @@ all options are case-sensitive.
 
 =item limit
 
-Do not read more than C<limit> files. This is usefull if you have 
+Do not read more than C<limit> files. This is useful if you have 
 very big archives, and are only interested in the first few files.
 
 =item extract
@@ -652,7 +652,7 @@ sub list_files {
     }
     
     if( @$aref == 0 or ( @$aref == 1 and $aref->[0] eq 'name' ) ) {
-        return map { $_->name } @{$self->_data};     
+        return map { $_->full_path } @{$self->_data};     
     } else {
     
         #my @rv;
@@ -1083,7 +1083,7 @@ If a true value was specified, it will give the C<Carp::longmess>
 equivalent of the error, in effect giving you a stacktrace.
 
 For backwards compatibility, this error is also available as 
-C<$Archive::Tar::error> allthough it is much recommended you use the
+C<$Archive::Tar::error> although it is much recommended you use the
 method call instead.
 
 =cut
@@ -1271,7 +1271,7 @@ The default is C<1>.
 By default, C<Archive::Tar> will try to put paths that are over
 100 characters in the C<prefix> field of your tar header. However,
 some older tar programs do not implement this spec. To retain 
-compatibillity with these older versions, you can set the 
+compatibility with these older versions, you can set the 
 C<$DO_NOT_USE_PREFIX> variable to a true value, and C<Archive>>Tar>
 will use an alternate way of dealing with paths over 100 characters
 by using the C<GNU Extended Header> feature.

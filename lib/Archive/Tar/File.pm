@@ -102,7 +102,7 @@ File size in bytes
 
 =item mtime
 
-Modification time. Adjusted to mac-time on MacOs if required
+Modification time. Adjusted to mac-time on MacOS if required
 
 =item chksum
 
@@ -428,7 +428,7 @@ sub validate {
 Returns a boolean to indicate whether the current object has content.
 Some special files like directories and so on never will have any
 content. This method is mainly to make sure you don't get warnings 
-for using unitialized values when looking at an objects's content.
+for using uninitialized values when looking at an object's content.
 
 =cut
 
@@ -548,12 +548,12 @@ Returns true if the file is of type C<socket>
 =item is_longlink
 
 Returns true if the file is of type C<LongLink>. 
-Should not happen after a succesful C<read>.
+Should not happen after a successful C<read>.
 
 =item is_label
 
 Returns true if the file is of type C<Label>.
-Should not happen after a succesful C<read>.
+Should not happen after a successful C<read>.
 
 =item is_unknown
 

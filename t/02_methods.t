@@ -402,7 +402,7 @@ chmod 0644, $COMPRESS_FILE;
                             (5*3*2) +           # check_tgz_file 
                                                 # check_tar_object fixed tests
                             (3 * 2 * (2 + $file_cnt)) +
-                            (4 * $file_cnt);    # check_tar_extract tests              
+                            ((4*$file_cnt) + 1);# check_tar_extract tests              
                           
                 skip( "No IO::Zlib - can not write compressed archives", $cnt ) 
                     unless $ZLIB;
@@ -668,6 +668,10 @@ sub check_tar_extract {
     
         unlink $path unless $NO_UNLINK;
     }
+
+    ### now check if list_files is returning the same info as get_files
+    is_deeply( [$tar->list_files], [ map { $_->full_path } $tar->get_files],
+                                    "   Verified via list_files as well" );
     
     #do { rmtree $_->full_path if -d $_->full_path && not $NO_UNLINK }
     #    for @dirs;
