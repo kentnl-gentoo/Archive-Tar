@@ -191,6 +191,12 @@ sub new {
     return $obj;
 }
 
+### copies the data, creates a clone ###
+sub clone {
+    my $self = shift;
+    return bless { %$self }, ref $self;
+}    
+
 sub _new_from_chunk {
     my $class = shift;
     my $chunk = shift or return undef;

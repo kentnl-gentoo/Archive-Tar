@@ -19,6 +19,16 @@ obviously can't.
 A snapshot of the latest development version of Archive::Tar may be 
 optained at: http://p4.elixus.org/snap/Archive-Tar.tar.gz
 
+* important changes in version 1.09 22/5/2004:
+
+This release holds some bugfixes and also the return of bin/ptar
+-   Make new() comply with the documentation and return undef on
+    a read() failure.
+-   Re-adds bin/ptar, which disappeared from this distribution after
+    0.22 (sorry about that).
+-   Makes 'IO::Zlib' a default prerequisite. You can still disable 
+    this by supplying the -n option to 'perl Makefile.PL'.    
+
 * important changes in version 1.08 5/1/2004:
 
 This release holds some bugfixes and extra tests over the 1.07 release:

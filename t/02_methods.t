@@ -69,8 +69,13 @@ my $archivebin     = File::Spec->catfile( @root, 'outbin.tar' );
 my $compressedbin  = File::Spec->catfile( @root, 'outbin.tgz' );
 my $archivex       = '0';
 my $compressedx    = '1';
-my $zlib           = eval { require IO::Zlib; 1 };
+my $zlib           = eval { require IO::Zlib; 1 } ? 1 : 0;
 my $NO_UNLINK      = scalar @ARGV ? 1 : 0;
+
+
+### compression check ###
+cmp_ok( Archive::Tar->can_handle_compressed_files, 'eq', $zlib,
+        "Proper probing of the ability to handle compressed files" );
 
 ### error tests ###
 {
@@ -145,7 +150,13 @@ for my $type( $archive, $compressed ) {
     like( $files[0]->get_content, qr/^bbbbbbbbbbb\s*$/, "   Content OK" );
     
     for my $file ( @add ) {
-        ok( $tar->contains_file($file),                 "   File found in archive" );
+        ok( $tar->contains_file($file), "   File found in archive" );
+        
+        my $rv = $tar->extract_file( $file, $file.$$ );
+        ok( $rv,            "   File extracted with alternate name" );
+        ok( -e $file.$$,    "       File Found" );                
+    
+        rm( $file.$$ ) unless $NO_UNLINK;
     }
 
     my $t2      = Archive::Tar->new;

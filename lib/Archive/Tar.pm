@@ -1,5 +1,5 @@
 ### the gnu tar specification:
-### http://www.gnu.org/manual/tar/html_node/tar_toc.html
+### http://www.gnu.org/software/tar/manual/html_mono/tar.html
 ###
 ### and the pax format spec, which tar derives from:
 ### http://www.opengroup.org/onlinepubs/007904975/utilities/pax.html
@@ -8,20 +8,22 @@ package Archive::Tar;
 require 5.005_03;
 
 use strict;
-use vars qw[$DEBUG $error $VERSION $WARN $FOLLOW_SYMLINK $CHOWN $CHMOD];
-$DEBUG          = 0;
-$WARN           = 1;
-$FOLLOW_SYMLINK = 0;
-$VERSION        = "1.08";
-$CHOWN          = 1;
-$CHMOD          = 1;
+use vars qw[$DEBUG $error $VERSION $WARN $FOLLOW_SYMLINK $CHOWN $CHMOD
+            $DO_NOT_USE_PREFIX];
+$DEBUG              = 0;
+$WARN               = 1;
+$FOLLOW_SYMLINK     = 0;
+$VERSION            = "1.09";
+$CHOWN              = 1;
+$CHMOD              = 1;
+$DO_NOT_USE_PREFIX  = 0;
 
 use IO::File;
 use Cwd;
-use Carp qw(carp);
-use File::Spec ();
-use File::Spec::Unix ();
-use File::Path ();
+use Carp                qw(carp);
+use File::Spec          ();
+use File::Spec::Unix    ();
+use File::Path          ();
 
 use Archive::Tar::File;
 use Archive::Tar::Constant;
@@ -90,7 +92,9 @@ sub new {
     ### same aref, causing for files to remain in memory always.
     my $obj = bless { _data => [ ], _file => 'Unknown' }, shift;
 
-    $obj->read( @_ ) if @_;
+    if (@_) {
+        return unless $obj->read( @_ );
+    }
     
     return $obj;
 }
@@ -334,16 +338,7 @@ sub contains_file {
     my $self = shift;
     my $full = shift or return;
     
-    my @parts = File::Spec->splitdir($full);
-    my $file  = pop @parts;
-    my $path  = File::Spec::Unix->catdir( @parts );
-    
-    for my $obj ( $self->get_files ) {
-        next unless $file eq $obj->name;
-        next unless $path eq $obj->prefix;
-    
-        return 1;       
-    }      
+    return 1 if $self->_find_entry($full);      
     return;
 }    
 
@@ -388,17 +383,49 @@ sub extract {
     return @files;        
 }
 
+=head2 $tar->extract_file( $file, [$extract_path )
+
+Write an entry, whose name is equivalent to the file name provided to
+disk. Optionally takes a second parameter, which is the full path
+(including filename) the entry will be written to.
+
+For example:
+    
+    $tar->extract_file( 'name/in/archive', 'name/i/want/to/give/it' );
+
+Returns true on success, false on failure.
+
+=cut
+
+sub extract_file {
+    my $self = shift;
+    my $file = shift or return;
+    my $alt  = shift;
+
+    my $entry = $self->_find_entry( $file ) 
+        or $self->_error( qq[Could not find an entry for '$file'] ), return;
+
+    return $self->_extract_file( $entry, $alt );
+}
+
 sub _extract_file {
     my $self    = shift;
     my $entry   = shift or return;
+    my $alt     = shift;
     my $cwd     = cwd();
+
+    ### you wanted an alternate extraction location ###
+    my $name = defined $alt ? $alt : $entry->name;
     
-                            ### splitpath takes a bool at the end to indicate that it's splitting a dir    
-    my ($vol,$dirs,$file)   = File::Spec::Unix->splitpath( $entry->name, $entry->is_dir );
+                            ### splitpath takes a bool at the end to indicate
+                            ### that it's splitting a dir    
+    my ($vol,$dirs,$file)   = File::Spec::Unix->splitpath(  $name,
+                                                            $entry->is_dir );
     my @dirs                = File::Spec::Unix->splitdir( $dirs );
     my @cwd                 = File::Spec->splitdir( $cwd );
     my $dir                 = File::Spec->catdir(@cwd, @dirs);               
-    
+
+   
     if( -e $dir && !-d _ ) {
         $^W && $self->_error( qq['$dir' exists, but it's not a directory!\n] );
         return;
@@ -454,7 +481,9 @@ sub _extract_file {
             $self->_error( qq[Could not set uid/gid on '$full'] );
     }
     
-    if( $CHMOD ) {
+    ### only chmod if we're allowed to, but never chmod symlinks, since they'll 
+    ### change the perms on the file they're linking too...
+    if( $CHMOD and not -l $full ) {
         chmod $entry->mode, $full or
             $self->_error( qq[Could not chown '$full' to ] . $entry->mode );
     }            
@@ -470,14 +499,30 @@ sub _make_special_file {
     my $err;
     
     if( $entry->is_symlink ) {
-        ON_UNIX && symlink( $entry->linkname, $file ) or 
-            $err =  qq[Making symbolink link from '] . $entry->linkname .
-                    qq[' to '$file' failed]; 
+        my $fail;
+        if( ON_UNIX ) {
+            symlink( $entry->linkname, $file ) or $fail++;
+        
+        } else {
+            $self->_extract_special_file_as_plain_file( $entry, $file ) 
+                or $fail++;   
+        }
+        
+        $err =  qq[Making symbolink link from '] . $entry->linkname .
+                qq[' to '$file' failed] if $fail; 
     
     } elsif ( $entry->is_hardlink ) {
-        ON_UNIX && link( $entry->linkname, $file ) or 
-            $err =  qq[Making hard link from '] . $entry->linkname .
-                    qq[' to '$file' failed];     
+        my $fail;
+        if( ON_UNIX ) {
+            link( $entry->linkname, $file ) or $fail++;
+   
+        } else {
+            $self->_extract_special_file_as_plain_file( $entry, $file ) 
+                or $fail++;   
+        }
+        
+        $err =  qq[Making hard link from '] . $entry->linkname .
+                qq[' to '$file' failed] if $fail;     
     
     } elsif ( $entry->is_fifo ) {
         ON_UNIX && !system('mknod', $file, 'p') or 
@@ -486,9 +531,11 @@ sub _make_special_file {
     } elsif ( $entry->is_blockdev or $entry->is_chardev ) {
         my $mode = $entry->is_blockdev ? 'b' : 'c';
             
-        ON_UNIX && !system('mknod', $file, $mode, $entry->devmajor, $entry->devminor ) or
+        ON_UNIX && !system('mknod', $file, $mode, 
+                            $entry->devmajor, $entry->devminor) or
             $err =  qq[Making block device ']. $entry->name .qq[' (maj=] .
-                    $entry->devmajor . qq[ min=] . $entry->devminor .qq[) failed.];          
+                    $entry->devmajor . qq[ min=] . $entry->devminor . 
+                    qq[) failed.];          
  
     } elsif ( $entry->is_socket ) {
         ### the original doesn't do anything special for sockets.... ###     
@@ -496,6 +543,34 @@ sub _make_special_file {
     }
     
     return $err ? $self->_error( $err ) : 1;
+}
+
+### don't know how to make symlinks, let's just extract the file as 
+### a plain file
+sub _extract_special_file_as_plain_file {
+    my $self    = shift;
+    my $entry   = shift     or return;
+    my $file    = shift;    return unless defined $file;
+    
+    my $err;
+    TRY: { 
+        my $orig = $self->_find_entry( $entry->linkname );
+        
+        unless( $orig ) {
+            $err =  qq[Could not find file '] . $entry->linkname .
+                    qq[' in memory.];
+            last TRY;
+        }
+        
+        ### clone the entry, make it appear as a normal file ###
+        my $clone = $entry->clone;
+        $clone->_downgrade_to_plainfile;          
+        $self->_extract_file( $clone, $file ) or last TRY;                      
+    
+        return 1;
+    }
+    
+    return $self->_error($err);
 }
 
 =head2 $tar->list_files( [\@properties] )
@@ -549,7 +624,10 @@ sub _find_entry {
     }
     
     for my $entry ( @{$self->_data} ) {
-        return $entry if $entry->name eq $file;      
+        my $path = File::Spec::Unix->catfile(
+                        grep { length } $entry->prefix, $entry->name
+                    );
+        return $entry if $path eq $file;      
     }
     
     $self->_error( qq[No such file in archive: '$file'] );
@@ -688,10 +766,10 @@ archive into a socket or a pipe to gzip or something.
 =cut
 
 sub write {
-    my $self    = shift;
-    my $file    = shift; $file   = '' unless defined $file;
-    my $gzip    = shift || 0;
-    my $prefix  = shift; $prefix = '' unless defined $prefix;
+    my $self        = shift;
+    my $file        = shift; $file   = '' unless defined $file;
+    my $gzip        = shift || 0;
+    my $ext_prefix  = shift; $ext_prefix = '' unless defined $ext_prefix;
 
     ### only need a handle if we have a file to print to ###
     my $handle = length($file)
@@ -701,47 +779,63 @@ sub write {
 
     my @rv;
     for my $entry ( @{$self->_data} ) {
-    
+        ### entries to be written to the tarfile ###
+        my @write_me;
+     
         ### names are too long, and will get truncated if we don't add a
         ### '@LongLink' file...
-        if( length($entry->name)    > NAME_LENGTH or 
-            length($entry->prefix)  > PREFIX_LENGTH 
-        ) {
-            
+        my $make_longlink = (   (length($entry->name) + length($entry->prefix) >
+                                NAME_LENGTH) && $DO_NOT_USE_PREFIX ) ||
+                            (   length($entry->name)    > NAME_LENGTH or 
+                                length($entry->prefix)  > PREFIX_LENGTH ) ||
+                            0;       
+
+        if( $make_longlink ) {
             my $longlink = Archive::Tar::File->new( 
                             data => LONGLINK_NAME, 
-                            File::Spec::Unix->catfile( grep { length } $entry->prefix, $entry->name ),
+                            File::Spec::Unix->catfile( 
+                                grep { length } $entry->prefix, $entry->name ),
                             { type => LONGLINK }
                         );
+                        
             unless( $longlink ) {
-                $self->_error( qq[Could not create 'LongLink' entry for oversize file '] . $entry->name ."'" );
+                $self->_error(  qq[Could not create 'LongLink' entry for ] .
+                                qq[oversize file '] . $entry->name ."'" );
                 return;
             };                      
     
+            push @write_me, [   $longlink, 
+                                qq[Could not write 'LongLink' entry for ]  . 
+                                qq[oversize file '] .  $entry->name ."'"];   
+        }
     
-            if( length($file) ) {
-                unless( $self->_write_to_handle( $handle, $longlink, $prefix ) ) {
-                    $self->_error( qq[Could not write 'LongLink' entry for oversize file '] .  $entry->name ."'" );
-                    return; 
+        ### add prefix OR longlink -- never both ###
+        {   my $no_prefix = $make_longlink ? 1 : 0;
+            push @write_me, [   $entry, $no_prefix,
+                                qq[Could not write entry '] . $entry->name . 
+                                qq[' to archive] ]; 
+        }
+        
+        for my $aref (@write_me) {
+            my ($w_entry, $no_prefix, $error_msg) = @$aref;
+
+            if( length $file ) {
+                unless( $self->_write_to_handle( 
+                                $handle, $w_entry, $ext_prefix, $no_prefix )
+                ) {
+                    $self->_error( $error_msg );
+                    return;          
                 }
+                
             } else {
-                push @rv, $self->_format_tar_entry( $longlink, $prefix );
-                push @rv, $entry->data              if  $entry->has_content;
-                push @rv, TAR_PAD->( $entry->size ) if  $entry->has_content &&
-                                                        $entry->size % BLOCK;
-            }     
-        }        
- 
-        if( length($file) ) {
-            unless( $self->_write_to_handle( $handle, $entry, $prefix ) ) {
-                $self->_error( qq[Could not write entry '] . $entry->name . qq[' to archive] );
-                return;          
+                    push @rv, $self->_format_tar_entry( 
+                                        $w_entry, $ext_prefix, $no_prefix );
+                    push @rv, $w_entry->data            
+                                        if  $w_entry->has_content;
+                    push @rv, TAR_PAD->( $w_entry->size )  
+                                        if  $w_entry->has_content &&
+                                            $w_entry->size % BLOCK;
             }
-        } else {
-            push @rv, $self->_format_tar_entry( $entry, $prefix );
-            push @rv, $entry->data              if  $entry->has_content;
-            push @rv, TAR_PAD->( $entry->size ) if  $entry->has_content &&
-                                                        $entry->size % BLOCK;
         }
     }
     
@@ -758,10 +852,11 @@ sub write {
 }
 
 sub _write_to_handle {
-    my $self    = shift;
-    my $handle  = shift or return;
-    my $entry   = shift or return;
-    my $prefix  = shift; $prefix = '' unless defined $prefix;
+    my $self        = shift;
+    my $handle      = shift or return;
+    my $entry       = shift or return;
+    my $ext_prefix  = shift; $ext_prefix = '' unless defined $ext_prefix;
+    my $no_prefix   = shift || 0;
     
     ### if the file is a symlink, there are 2 options:
     ### either we leave the symlink intact, but then we don't write any data
@@ -774,7 +869,7 @@ sub _write_to_handle {
     ### as a regular file
     $entry->_downgrade_to_plainfile if $symlink_ok;
     
-    my $header = $self->_format_tar_entry( $entry, $prefix );
+    my $header = $self->_format_tar_entry( $entry, $ext_prefix, $no_prefix );
         
     unless( $header ) {
         $self->_error( qq[Could not format header for entry: ] . $entry->name );
@@ -803,10 +898,10 @@ sub _format_tar_entry {
     my $self        = shift;
     my $entry       = shift or return;
     my $ext_prefix  = shift; $ext_prefix = '' unless defined $ext_prefix;
+    my $no_prefix   = shift || 0;
 
     my $file    = $entry->name;
     my $prefix  = $entry->prefix; $prefix = '' unless defined $prefix;
-    my $match   = quotemeta $prefix;
     
     ### remove the prefix from the file name 
     ### not sure if this is still neeeded --kane
@@ -817,7 +912,8 @@ sub _format_tar_entry {
     #    $file =~ s/^$match//;
     #} 
     
-    $prefix = File::Spec::Unix->catdir($ext_prefix, $prefix) if length $ext_prefix;
+    $prefix = File::Spec::Unix->catdir($ext_prefix, $prefix) 
+                if length $ext_prefix;
     
     ### not sure why this is... ###
     my $l = PREFIX_LENGTH; # is ambiguous otherwise...
@@ -833,7 +929,7 @@ sub _format_tar_entry {
                 (map { sprintf( $f1, $entry->$_() ) } qw[mode uid gid]),
                 (map { sprintf( $f2, $entry->$_() ) } qw[size mtime]),
                 
-                "",  # checksum filed - space padded a bit down 
+                "",  # checksum field - space padded a bit down 
                 
                 (map { $entry->$_() }                 qw[type linkname magic]),
                 
@@ -842,7 +938,7 @@ sub _format_tar_entry {
                 (map { $entry->$_() }                 qw[uname gname]),
                 (map { sprintf( $f1, $entry->$_() ) } qw[devmajor devminor]),
                 
-                $prefix
+                ($no_prefix ? '' : $prefix)
     );
     
     ### add the checksum ###
@@ -1040,9 +1136,9 @@ be the name of the tar file to create or a reference to an open file
 handle (e.g. a GLOB reference).  All relative paths in the tar file will
 be created underneath the current working directory.
 
-C<extract_archive> will return a list of files it extract.
+C<extract_archive> will return a list of files it extracted.
 If the archive extraction fails for any reason, C<extract_archive>
-will return.  Please use the C<error> method to find the cause
+will return false.  Please use the C<error> method to find the cause
 of the failure.
 
 =cut
@@ -1056,6 +1152,20 @@ sub extract_archive {
     
     return $tar->read( $file, $gzip, { extract => 1 } );
 }
+
+=head2 Archive::Tar->can_handle_compressed_files
+
+A simple checking routine, which will return true if C<Archive::Tar> 
+is able to uncompress compressed archives on the fly with C<IO::Zlib>,
+or false if C<IO::Zlib> is not installed.
+
+You can use this as a shortcut to determine whether C<Archive::Tar>
+will do what you think before passing compressed archives to its
+C<read> method.
+
+=cut
+
+sub can_handle_compressed_files { return ZLIB ? 1 : 0 }
 
 1;
 
@@ -1092,6 +1202,18 @@ In some cases, this may not be desired. In that case, set this
 variable to C<0> to disable C<chmod>-ing.
 
 The default is C<1>.
+
+=head2 $Archive::Tar::DO_NOT_USE_PREFIX
+
+By default, C<Archive::Tar> will try to put paths that are over
+100 characters in the C<prefix> field of your tar header. However,
+some older tar programs do not implement this spec. To retain 
+compatibillity with these older versions, you can set the 
+C<$DO_NOT_USE_PREFIX> variable to a true value, and C<Archive>>Tar>
+will use an alternate way of dealing with paths over 100 characters
+by using the C<GNU Extended Header> feature.
+
+The default is C<0>.
 
 =head2 $Archive::Tar::DEBUG
 
@@ -1150,6 +1272,20 @@ No, not easily. See previous question.
 Probably more than X kb, since it will all be read into memory. If 
 this is a problem, and you don't need to do in memory manipulation 
 of the archive, consider using C</bin/tar> instead.
+
+=item What do you do with unsupported filetypes in an archive?
+
+C<Unix> has a few filetypes that aren't supported on other platforms, 
+like C<Win32>. If we encounter a C<hardlink> or C<symlink> we'll just
+try to make a copy of the original file, rather than throwing an error.
+
+This does require you to read the entire archive in to memory first,
+since otherwise we wouldn't know what data to fill the copy with.
+(This means that you can not use the class methods on archives that 
+have incompatible filetypes and still expect things to work).
+
+For other filetypes, like C<chardevs> and C<blockdevs> we'll warn that
+the extraction of this particular item didn't work.
 
 =back
 
