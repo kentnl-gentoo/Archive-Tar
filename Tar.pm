@@ -9,7 +9,7 @@ use Symbol;
 require Time::Local if $^O eq "MacOS";
 
 use vars qw($VERSION @ISA @EXPORT_OK %EXPORT_TAGS);
-$VERSION = do { my @a=q$Name: version_0_20 $ =~ /\d+/g; sprintf "%d." . ("%02d" x $#a ),@a };
+$VERSION = do { my @a=q$Name: version_0_21 $ =~ /\d+/g; sprintf "%d." . ("%02d" x $#a ),@a };
 
 require Exporter;
 @ISA = qw(Exporter);
@@ -30,11 +30,12 @@ my $compression = eval {
     require Compress::Zlib; 
     sub Compress::Zlib::gzFile::gzseek {
 	my $tmp;
-	
-	$_[0]->gzread ($tmp, 512)
-	    while (($_[1] -= 512) >= 0);
 
-	$_[0]->gzread ($tmp, 512 + $_[1]);
+	$_[0]->gzread ($tmp, 4096), $_[1] -= 4096
+	    while ($_[1] > 4096);
+
+	$_[0]->gzread ($tmp, $_[1])
+	  if $_[1];
     }
     1;
 };
@@ -116,7 +117,7 @@ sub filetype {
 
 sub _make_special_file_UNIX {
     my ($file) = @_;
-		
+
     if ($file->{type} == SYMLINK) {
 	symlink $_->{linkname}, $file or
 	    $^W && carp ("Making symbolic link from ", $file->{linkname}, 
@@ -147,7 +148,7 @@ sub _make_special_file_UNIX {
 
 sub _make_special_file_Win32 {
     my ($file) = @_;
-		
+
     if ($file->{type} == SYMLINK) {
 	$^W && carp ("Making symbolic link from ", $file->{linkname}, 
 		     " to ", $file->{name}, ", failed.\n");
@@ -245,7 +246,7 @@ sub _read_tar {
     my ($file, $seekable, $extract) = @_;
     my $tarfile = [];
     my ($head, $offset, $size);
-    
+
     $file->gzread ($head, $tar_header_length)
 	or goto &_drat;
 
@@ -292,12 +293,12 @@ sub _read_tar {
 	# so we ass_u_me a directory if the name ends in slash
 	$type = DIR
 	    if $name =~ m|/$| and not $type;
-	
+
 	last READLOOP if $head eq "\0" x 512; # End of archive
 	# Apparently this should really be two blocks of 512 zeroes,
 	# but GNU tar sometimes gets it wrong. See comment in the
 	# source code (tar.c) to GNU cpio.
-	
+
 	substr ($head, 148, 8) = "        ";
 	if (unpack ("%16C*", $head) != $chksum) {
 	   warn "$name: checksum error.\n";
@@ -315,7 +316,7 @@ sub _read_tar {
 		$file->gzread ($data, $block)
 		    or goto &_drat
 			if ($block);
-		
+
 		# Ignore everything we've just read.
 		undef $data;
 	    } else {
@@ -323,15 +324,15 @@ sub _read_tar {
 		    $error = "Read error on tarfile.";
 		    return undef;
 		}
-		
+
 		# Throw away any trailing garbage
 		substr ($data, $size) = "";
 	    }
 	}
-	
+
 	# Guard against tarfiles with garbage at the end
 	last READLOOP if $name eq ''; 
-	
+
 	$entry = {name => $name,		    
 		  mode => $mode,
 		  uid => $uid,
@@ -378,7 +379,7 @@ sub _read_tar {
 sub _format_tar_entry {
     my ($ref) = shift;
     my ($tmp,$file,$prefix,$pos);
-  
+
     $file = $ref->{name};
     if (length ($file) > 99) {
 	$pos = index $file, "/", (length ($file) - 100);
@@ -412,14 +413,14 @@ sub _format_tar_entry {
 		 sprintf("%6o ",$ref->{devminor}),
 		 $prefix);
     substr($tmp,148,7) = sprintf("%6o\0", unpack("%16C*",$tmp));
-    
+
     return $tmp;
 }
 
 sub _format_tar_file {
     my @tarfile = @_;
     my $file = "";
-    
+
     foreach (@tarfile) {
 	$file .= _format_tar_entry $_;
 	$file .= $_->{data};
@@ -427,7 +428,7 @@ sub _format_tar_file {
 	    if ($_->{size} & 0x1ff);
     }
     $file .= "\0" x 1024;
-    
+
     return $file;
 }
 
@@ -492,7 +493,7 @@ sub _add_file {
 
 	$file = _munge_file ($file)
 	    if ($^O eq "MacOS");
-	
+
 	return +{name => $file,		    
 		 mode => $mode,
 		 uid => $uid,
@@ -709,7 +710,7 @@ sub write {
 sub add_files {
     my $self = shift;
     my ($counter, $file, $entry);
-    
+
     foreach $file (@_) {
 	if ($entry = _add_file ($file)) {
 	    push (@{$self->{'_data'}}, $entry);
@@ -725,7 +726,7 @@ sub add_data {
     my ($self, $file, $data, $opt) = @_;
     my $ref = {};
     my ($key);
-    
+
     if($^O eq "MacOS") {
 	$file = _munge_file($file);
     }
@@ -869,7 +870,7 @@ sub gzwrite {
 }
 
 sub gzclose {
-    close $_[0];
+    !close $_[0];
 }
 
 1;
