@@ -2,9 +2,10 @@ package Archive::Tar;
 require 5.005_03;
 
 use strict;
-use vars qw[$DEBUG $error $VERSION];
-$DEBUG = 0;
-$VERSION = "0.99_01";
+use vars qw[$DEBUG $error $VERSION $WARN];
+$DEBUG      = 0;
+$WARN       = 1;
+$VERSION    = "0.99_02";
 
 use IO::File;
 use Cwd;
@@ -83,7 +84,7 @@ sub new {
     return $obj;
 }
 
-=head2 $tar->read ( $filename|$handle, $compressed)
+=head2 $tar->read ( $filename|$handle, $compressed, {opt => 'val'} )
 
 Read the given tar file into memory. 
 The first argument can either be the name of a file or a reference to
@@ -98,10 +99,30 @@ installed, since it will transparently Do The Right Thing.
 Archive::Tar will warn if you try to pass a compressed file if 
 IO::Zlib is not available and simply return undef.
 
+The third argument can be a hash reference with options. Note that 
+all options are case-sensitive.
+
+=over 4
+
+=item limit
+
+Do not read more than C<limit> files. This is usefull if you have 
+very big archives, and are only interested in the first few files.
+
+=item extract
+
+If set to true, immediately extract entries when reading them. This
+gives you the same memory break as the C<extract_archive> function.
+Note however that entries will not be read into memory, but written 
+straight to disk.
+
+=back
+
 All files are stored internally as C<Archive::Tar::File> objects.
 Please consult the L<Archive::Tar::File> documentation for details.
 
-Returns the number of files read in.
+Returns the number of files read in scalar context, and a list of
+C<Archive::Tar::File> objects in list context.
 
 =cut
 
@@ -109,6 +130,7 @@ sub read {
     my $self = shift;    
     my $file = shift || $self->_file;
     my $gzip = shift || 0;
+    my $opts = shift || {};
     
     unless( defined $file ) {
         $self->error( qq[No file to read from!] );
@@ -120,23 +142,23 @@ sub read {
     my $handle = $self->_get_handle($file, $gzip, READ_ONLY->($gzip) ) 
                     or return undef;
 
-    my $data = $self->_read_tar( $handle );
+    my $data = $self->_read_tar( $handle, $opts );
 
     $self->_data( $data );    
 
-    return scalar @$data;
+    return wantarray ? @$data : scalar @$data;
 }
 
 sub _get_handle {
     my $self = shift;
-    my $file = shift or return undef;
-    my $gzip = shift;
+    my $file = shift; return undef unless defined $file;
+    my $gzip = shift || 0;
     my $mode = shift || READ_ONLY->($gzip); # default to read only
     
     my $fh;
     
-    
-    if( ZLIB ) {
+    ### only default to ZLIB if we're not trying to /write/ to a handle ###
+    if( ZLIB and $gzip || MODE_READ->( $mode ) ) {
         
         ### IO::Zlib will Do The Right Thing, even when passed a plain file ###
         $fh = new IO::Zlib;
@@ -162,17 +184,24 @@ sub _get_handle {
 sub _read_tar {
     my $self    = shift;
     my $handle  = shift or return undef;
-    my $extract = shift || 0;
+    my $opts    = shift || {};
+
+    my $count   = $opts->{limit}    || 0;
+    my $extract = $opts->{extract}  || 0;
+    
+    ### set a cap on the amount of files to extract ###
+    my $limit   = 0;
+    $limit = 1 if $count > 0;
  
     my $tarfile = [ ];
     my $chunk;
     my $read = 0;
-    my $gzip = GZIP_MAGIC_NUM;
         
     LOOP: 
-    while( $handle->read( $chunk, HEAD ) ) {
+    while( $handle->read( $chunk, HEAD ) ) {        
         
         unless( $read++ ) {
+            my $gzip = GZIP_MAGIC_NUM;
             if( $chunk =~ /$gzip/ ) {
                 $self->_error( qq[Can not read compressed format in tar-mode] );
                 return undef;
@@ -202,7 +231,7 @@ sub _read_tar {
             
             my $block = BLOCK_SIZE->( $entry->size );
 
-            my $data;
+            my $data = $entry->get_content_by_ref;
 #            while( $block ) {
 #                $handle->read( $data, $block ) or (
 #                    $self->_error( qq[Could not read block for ] . $entry->name ),
@@ -217,28 +246,53 @@ sub _read_tar {
             ### just read everything into memory 
             ### can't do lazy loading since IO::Zlib doesn't support 'seek'
             ### this is because Compress::Zlib doesn't support it =/            
-            if( $handle->read( $data, $block ) < $block ) {
+            if( $handle->read( $$data, $block ) < $block ) {
                 $self->_error( qq[Read error on tarfile ']. $entry->name ."'" );
                 return undef;
             }
 
             ### throw away trailing garbage ###
-            substr ($data, $entry->size) = "";
+            substr ($$data, $entry->size) = "";
 
             ### store the data of the file -- this may be too memory intensive ###
-            $entry->data( $data );
+            #$entry->data( $data );
 
             $self->_extract_file( $entry ) if $extract;
         }
         
-        # Guard against tarfiles with garbage at the end
+        ### Guard against tarfiles with garbage at the end
 	    last LOOP if $entry->name eq ''; 
     
-        push @$tarfile, $entry unless $extract;
+        ### push only the name on the rv if we're extracting -- for extract_archive
+        push @$tarfile, ($extract ? $entry->name : $entry);
     
+        if( $limit ) {
+            $count-- unless $entry->is_longlink || $entry->is_dir;    
+            last LOOP unless $count;
+        }
     }
     
-    return $tarfile;
+    ### clean up of the entries.. posix tar /apparently/ has some
+    ### weird 'feature' that allows for filenames > 255 characters
+    ### they'll put a header in with as name '././@LongLink' and the
+    ### contents will be the name of the /next/ file in the archive
+    ### pretty crappy and kludgy if you ask me
+    my @return;
+    while( my $entry = shift @$tarfile ) {
+        
+        if( UNIVERSAL::isa($entry, 'Archive::Tar::File') and 
+            $entry->is_longlink 
+        ) {
+            my $real_entry = shift @$tarfile;
+            $real_entry->name( $entry->data );
+            push @return, $real_entry;        
+        
+        } else {
+            push @return, $entry;
+        }
+    }
+                  
+    return \@return;
 }    
 
 =head2 $tar->extract( [@filenames] )
@@ -311,7 +365,7 @@ sub _extract_file {
     my $full = File::Spec->catfile( $dir, $file );
     
     if( $entry->type == UNKNOWN ) {
-        $self->_error( qq[Unknown file to for file '$full'] );
+        $self->_error( qq[Unknown file type for file '$full'] );
         return undef;
     }
     
@@ -352,8 +406,8 @@ sub _extract_file {
 
 sub _make_special_file {
     my $self    = shift;
-    my $entry   = shift or return undef;
-    my $file    = shift or return undef;
+    my $entry   = shift     or return undef;
+    my $file    = shift;    return undef unless defined $file;
     
     my $err;
     
@@ -423,7 +477,7 @@ sub _find_entry {
     my $self = shift;
     my $file = shift;
 
-    unless( $file ) {
+    unless( defined $file ) {
         $self->_error( qq[No file specified] );
         return undef;
     }
@@ -499,8 +553,8 @@ Returns true on success and false on failure.
 
 sub rename {
     my $self = shift;
-    my $file = shift or return undef;
-    my $new  = shift or return undef;
+    my $file = shift; return undef unless defined $file;
+    my $new  = shift; return undef unless defined $new;
     
     my $entry = $self->_find_entry( $file ) or return undef;
     
@@ -560,29 +614,32 @@ sub write {
                     or return undef;
 
     for my $entry ( @{$self->_data} ) {
-        my $header = $self->_format_tar_entry( $entry, $prefix );
-        
-        unless( $header ) {
-            $self->_error( qq[Could not format header for entry: ] . $entry->name );
-            return undef;
-        }      
-        print $handle $header or (
-            $self->_error( qq[Could not write header for: ] . $entry->name ),
-            return undef
-        );
-        
-        ### i think this is safe for all types... --kane
-        ### possibly missing the binmode...
-        #if( length $entry->type and $entry->type == FILE ) {
-            print $handle $entry->data or (
-                $self->_error( qq[Could not write data for: ] . $entry->name ),
-                return undef
-            );
-        #}         
-
-        ### pad the end of the entry if required ###
-        print $handle TAR_PAD->( $entry->size ) if $entry->size % BLOCK;
-
+    
+        ### names are too long, and will get truncated if we don't add a
+        ### '@LongLink' file...
+        if( $entry->name > NAME_LENGTH or $entry->prefix > PREFIX_LENGTH ) {
+            
+            
+            my $longlink = Archive::Tar::File->new( 
+                            data => LONGLINK_NAME, 
+                            File::Spec::Unix->catfile( grep { length } $entry->prefix, $entry->name ),
+                            { type => LONGLINK }
+                        );
+            unless( $longlink ) {
+                $self->_error( qq[Could not create 'LongLink' entry for oversize file '] . $entry->name ."'" );
+                return undef;
+            };                      
+    
+            unless( $self->_write_to_handle( $handle, $longlink, $prefix ) ) {
+                $self->_error( qq[Could not write 'LongLink' entry for oversize file '] .  $entry->name ."'" );
+                return undef; 
+            }
+        }        
+ 
+        unless( $self->_write_to_handle( $handle, $entry, $prefix ) ) {
+            $self->_error( qq[Could not write entry '] . $entry->name . qq[' to archive] );
+            return undef;          
+        }
     }
         
     print $handle TAR_END x 2 or (
@@ -592,6 +649,40 @@ sub write {
 
     return 1;
 }
+
+sub _write_to_handle {
+    my $self    = shift;
+    my $handle  = shift or return undef;
+    my $entry   = shift or return undef;
+    my $prefix  = shift || '';
+    
+    my $header = $self->_format_tar_entry( $entry, $prefix );
+        
+    unless( $header ) {
+        $self->_error( qq[Could not format header for entry: ] . $entry->name );
+        return undef;
+    }      
+
+    print $handle $header or (
+        $self->_error( qq[Could not write header for: ] . $entry->name ),
+        return undef
+    );
+    
+    ### i think this is safe for all types... --kane
+    ### possibly missing the binmode...
+    #if( length $entry->type and $entry->type == FILE ) {
+        print $handle $entry->data or (
+            $self->_error( qq[Could not write data for: ] . $entry->name ),
+            return undef
+        );
+    #}         
+
+    ### pad the end of the entry if required ###
+    print $handle TAR_PAD->( $entry->size ) if $entry->size % BLOCK;
+
+    return 1;
+}
+
 
 sub _format_tar_entry {
     my $self        = shift;
@@ -609,7 +700,8 @@ sub _format_tar_entry {
     $prefix = File::Spec::Unix->catdir($ext_prefix, $prefix) if length $ext_prefix;
     
     ### not sure why this is... ###
-    substr ($prefix, 0, -155) = "" if length $prefix > 154;
+    my $l = PREFIX_LENGTH; # is ambiguous otherwise...
+    substr ($prefix, 0, -$l) = "" if length $prefix >= PREFIX_LENGTH;
     
     my $f1 = "%06o"; my $f2  = "%11o";
     
@@ -617,13 +709,19 @@ sub _format_tar_entry {
     my $tar = pack (
                 PACK,
                 $file,
+                
                 (map { sprintf( $f1, $entry->$_ ) } qw[mode uid gid]),
                 (map { sprintf( $f2, $entry->$_ ) } qw[size mtime]),
+                
                 "",  # checksum filed - space padded a bit down 
-                (map { $entry->$_ } qw[type linkname magic]),
+                
+                (map { $entry->$_ }                 qw[type linkname magic]),
+                
                 $entry->version || '00',
-                (map { $entry->$_ } qw[uname gname]),
+                
+                (map { $entry->$_ }                 qw[uname gname]),
                 (map { sprintf( $f1, $entry->$_ ) } qw[devmajor devminor]),
+                
                 $prefix
     );
     
@@ -729,7 +827,11 @@ method call instead.
         my $msg     = $error = shift;
         $longmess   = Carp::longmess($error);
         
-        carp $DEBUG ? $longmess : $msg;
+        ### set Archive::Tar::WARN to 0 to disable printing
+        ### of errors
+        if( $WARN ) {
+            carp $DEBUG ? $longmess : $msg;
+        }
         
         return undef;
     }
@@ -769,8 +871,8 @@ failure.
 sub create_archive {
     my $class = shift;
     
-    my $file    = shift or return undef;
-    my $gzip    = shift;
+    my $file    = shift; return undef unless defined $file;
+    my $gzip    = shift || 0;
     my @files   = @_;
     
     unless( @files ) {
@@ -802,7 +904,7 @@ references.
 
 sub list_archive {
     my $class   = shift;
-    my $file    = shift or return undef;
+    my $file    = shift; return undef unless defined $file;
     my $gzip    = shift || 0;
 
     my $tar = $class->new($file, $gzip);
@@ -827,14 +929,44 @@ of the failure.
 
 sub extract_archive {
     my $class   = shift;
-    my $file    = shift or return undef;
+    my $file    = shift; return undef unless defined $file;
     my $gzip    = shift || 0;
     
-    my $tar     = $class->new( $file, $gzip, 1);
-    return $tar->extract;     
+    my $tar = $class->new( ) or return undef;
+    
+    return $tar->read( $file, $gzip, { extract => 1 } );
 }
 
 1;
+
+__END__
+
+=head1 GLOBAL VARIABLES
+
+=head2 $Archive::Tar::DEBUG
+
+Set this variable to C<1> to always get the C<Carp::longmess> output
+of the warnings, instead of the regular C<carp>. This is the same 
+message you would get by doing: 
+    
+    $tar->error(1);
+
+Defaults to C<0>.
+
+=head2 $Archive::Tar::WARN
+
+Set this variable to C<0> if you do not want any warnings printed.
+Personally I recommend against doing this, but people asked for the
+option. Also, be advised that this is of course not threadsafe.
+
+Defaults to C<1>.
+
+=head2 $Archive::Tar::error
+
+Holds the last reported error. Kept for historical reasons, but it's
+use is very much discouraged. Use the C<error()> method instead:
+
+    warn $tar->error unless $tar->extract;
 
 =head1 FAQ
 
@@ -868,7 +1000,7 @@ No, not easily. See previous question.
 =item Check if passed in handles are open for read/write
     
 Currently I don't know of any portable pure perl way to do this.
-Suggestions welcome
+Suggestions welcome.
 
 =back
 
@@ -893,29 +1025,3 @@ you may redistribute and/or modify it under the same
 terms as Perl itself.
 
 =cut
-
-__END__
-
-::method::
-read ($ref, $compressed)                    # done
-add_files(@filenamelist)                    # done
-add_data ($filename, $data, $opthashref)    # done
-remove (@filenamelist)                      # done
-write ($file, $compressed)                  # done
-extract(@filenames)                         # done
-list_files(['property', 'property',...])    # done
-get_content($file)                          # done
-replace_content($file,$content)             # done
-
-::class::
-create_archive ($file, $compression, @filelist)     # done
-list_archive ($file, ['property', 'property',...])  # done
-extract_archive ($file)                             # done
-new ($file)                                         # done    
-
-
-::TODO::
-checks on filehandles for open for read/write
-use Inline C => q{ int can_write(SV* sv) { return IoOFP(GvIO(SvRV(sv))); } };
-	<lathos>	print "OK!" if can_write(\*STDERR); # "OK!"
-	<lathos>	open my $x, "foo"; print "OK!" if can_write($x); # ""

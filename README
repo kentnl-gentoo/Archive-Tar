@@ -16,7 +16,22 @@ Archive::Tar will still work without IO::Zlib, it will just complain
 when you try to use a compressed archive or write on, since it 
 obviously can't. 
 
-* important changes in version 0.99 16/3/2003:
+* important changes in version 0.99_02 26/3/2003:
+
+Added options to be passed to read, namely:
+	- extract (to extract while reading)
+	- limit (to limit the amount of files read from the archive)
+
+Implemented the '././@LongLinke' support, which is GNU's way of
+dealing with filenames that are longer than 255 chars.
+
+Added a global variable $WARN which controls whether warnings get
+printed or just stored.
+
+Fixed a few small bugs that considered files named '0' or '' to not
+really be files and refuse to package them.
+
+* important changes in version 0.99_01 16/3/2003:
 
 Total rewrite from the ground up. Removed as many as the nasty 
 bits (no pun intended) as possible and tucked them away. 

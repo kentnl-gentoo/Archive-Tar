@@ -8,7 +8,8 @@ BEGIN {
                 FILE HARDLINK SYMLINK CHARDEV BLOCKDEV DIR FIFO SOCKET UNKNOWN
                 BUFFER HEAD READ_ONLY WRITE_ONLY UNPACK PACK TIME_OFFSET ZLIB
                 BLOCK_SIZE TAR_PAD TAR_END ON_UNIX BLOCK CAN_READLINK MAGIC 
-                VERSION UNAME GNAME CAN_CHOWN MODE CHECK_SUM UID GID GZIP_MAGIC_NUM
+                VERSION UNAME GNAME CAN_CHOWN MODE CHECK_SUM UID GID NAME_LENGTH
+                GZIP_MAGIC_NUM MODE_READ LONGLINK LONGLINK_NAME PREFIX_LENGTH
             ];
 
     require Time::Local if $^O eq "MacOS";
@@ -23,6 +24,7 @@ use constant DIR            => 5;
 use constant FIFO           => 6;
 use constant SOCKET         => 8;
 use constant UNKNOWN        => 9;
+use constant LONGLINK       => 'L';
 
 use constant BUFFER         => 4096;
 use constant HEAD           => 512;
@@ -34,6 +36,7 @@ use constant TAR_END        => "\0" x BLOCK;
 
 use constant READ_ONLY      => sub { shift() ? 'rb' : 'r' };
 use constant WRITE_ONLY     => sub { $_[0] ? 'wb' . shift : 'w' };
+use constant MODE_READ      => sub { $_[0] =~ /^r/ ? 1 : 0 };
 
 # Pointless assigment to make -w shut up
 my $getpwuid = 'unknown' unless eval { my $f = getpwuid (0); };
@@ -48,10 +51,13 @@ use constant CHECK_SUM      => "      ";
 
 use constant UNPACK         => 'A100 A8 A8 A8 A12 A12 A8 A1 A100 A6 A2 A32 A32 A8 A8 A155 x12';
 use constant PACK           => 'a100 a8 a8 a8 a12 a12 A8 a1 a100 a6 a2 a32 a32 a8 a8 a155 x12';
+use constant NAME_LENGTH    => 100;
+use constant PREFIX_LENGTH  => 155;
 
 use constant TIME_OFFSET    => ($^O eq "MacOS") ? Time::Local::timelocal(0,0,0,1,0,70) : 0;    
 use constant MAGIC          => "ustar";
 use constant VERSION        => "00";
+use constant LONGLINK_NAME  => '././@LongLink';
 
 use constant ZLIB           => do { eval { require IO::Zlib }; $@ ? 0 : 1 };
 use constant GZIP_MAGIC_NUM => qr/^(?:\037\213|\037\235)/;

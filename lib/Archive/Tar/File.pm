@@ -182,7 +182,7 @@ sub _new_from_chunk {
     ### no reason to drop it, makes writing it out easier ###
     #$obj->prefix('');
     
-    $obj->type(FILE) if ( (!length $obj->type) or ($obj->type =~ /\D/) );
+    $obj->type(FILE) if ( (!length $obj->type) or ($obj->type =~ /\W/) );
 
     $obj->type(DIR) if ( ($obj->type == FILE) && ($obj->name =~ m|/$|) );    
 
@@ -228,8 +228,8 @@ sub _new_from_file {
 
 sub _new_from_data {
     my $class   = shift;
-    my $path    = shift or return undef;
-    my $data    = shift or return undef;
+    my $path    = shift     or return undef;
+    my $data    = shift;    return undef unless defined $data;
     my $opt     = shift;
     
     my ($prefix,$file) = $class->_prefix_and_file($path);
@@ -299,6 +299,9 @@ sub _filetype {
     return BLOCKDEV if (-b _);		# Block special
 
     return CHARDEV  if (-c _);		# Character special
+    
+    ### shouldn't happen, this is when making archives, not reading ###
+    return LONGLINK if ( $file eq LONGLINK_NAME );
 
     return UNKNOWN;		            # Something else (like what?)
 
@@ -433,6 +436,11 @@ Returns true if the file is of type C<fifo>
 
 Returns true if the file is of type C<socket>
 
+=item is_longlink
+
+Returns true if the file is of type C<LongLink>. 
+Should not happen after a succesful C<read>.
+
 =item is_unknown
 
 Returns true if the file type is C<unknown>
@@ -450,6 +458,6 @@ sub is_blockdev { BLOCKDEV == $_[0]->type }
 sub is_fifo     { FIFO     == $_[0]->type }
 sub is_socket   { SOCKET   == $_[0]->type }
 sub is_unknown  { UNKNOWN  == $_[0]->type } 
-
+sub is_longlink { LONGLINK eq $_[0]->type }
 
 1;

@@ -1,4 +1,4 @@
-use Test::More tests => 51;
+use Test::More tests => 53;
 use strict;
 use File::Spec ();
 use Archive::Tar;
@@ -116,13 +116,13 @@ for my $type( $archive, $compressed ) {
  
 {
     {
-        my @files = $tar->extract();        
-        is( scalar @files, 2,   "Extracting files using 'extract()'" );
+        my @files = $tar->extract();                    
+        is( scalar(@files), 2,   "Extracting files using 'extract()'" );
         _check_files( @files );
     }
     {
     
-        my @files = Archive::Tar->extract_archive( $archive );
+        my @files = Archive::Tar->extract_archive( $archive );       
         is( scalar @files, 2,   "Extracting files using 'extract_archive()'" );
         _check_files( @files );
     }
@@ -140,3 +140,9 @@ for my $type( $archive, $compressed ) {
         unlink $_ for @files;
     }
 }    
+
+{
+    my @files = $tar->read( $archive, 0, { limit => 1 } );
+    is( scalar @files, 1,                               "Limited read" );
+    is( (shift @files)->name, (sort keys %$expect)[0],  "   Expected file found" );
+}     
