@@ -2,6 +2,7 @@ BEGIN { chdir 't' if -d 't' }
 
 use Test::More 'no_plan';
 use strict;
+use lib '../lib';
 
 use Cwd;
 use IO::File;
