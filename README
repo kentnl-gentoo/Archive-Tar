@@ -16,6 +16,12 @@ Archive::Tar will still work without IO::Zlib, it will just complain
 when you try to use a compressed archive or write on, since it 
 obviously can't. 
 
+* important changes in version 0.99_06 5/5/2003:
+
+This release only entails a bug fix on 0.99_05 -- C<extract_archive>
+was dealing wrongly with special files such as hardlinks etc. This
+is now fixed.
+
 * important changes in version 0.99_05 30/4/2003:
 
 Apparently windows has some issues with long path names.

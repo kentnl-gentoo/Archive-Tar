@@ -7,7 +7,7 @@ use strict;
 use vars qw[$DEBUG $error $VERSION $WARN];
 $DEBUG      = 0;
 $WARN       = 1;
-$VERSION    = "0.99_05";
+$VERSION    = "0.99_06";
 
 use IO::File;
 use Cwd;
@@ -284,7 +284,8 @@ sub _read_tar {
             undef $real_name;      
         }
 
-        $self->_extract_file( $entry ) if $extract && $entry->is_file;
+        $self->_extract_file( $entry )  if $extract && !$entry->is_longlink
+                                        && !$entry->is_unknown && !$entry->is_label;
         
         ### Guard against tarfiles with garbage at the end
 	    last LOOP if $entry->name eq ''; 
@@ -360,10 +361,12 @@ sub _extract_file {
         return undef;
     }
     
-    eval { File::Path::mkpath( $dir, 0, 0777 ) };
-    if( $@ ) {
-        $self->_error( qq[Could not create directory '$dir': $@] );
-        return undef;
+    unless ( -d _ ) {
+        eval { File::Path::mkpath( $dir, 0, 0777 ) };
+        if( $@ ) {
+            $self->_error( qq[Could not create directory '$dir': $@] );
+            return undef;
+        }
     }
     
     ### we're done if we just needed to create a dir ###
