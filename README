@@ -18,6 +18,10 @@ obviously can't.
 
 * important changes in version 0.99_03 28/4/2003:
 
+Make Archive::Tar work happily on perl 5.005_03
+
+* important changes in version 0.99_03 28/4/2003:
+
 This release only has bug fixes on 0.99_02.
 
 Fixed handling of long file names when extracting with 

@@ -7,7 +7,7 @@ use strict;
 use vars qw[$DEBUG $error $VERSION $WARN];
 $DEBUG      = 0;
 $WARN       = 1;
-$VERSION    = "0.99_03";
+$VERSION    = "0.99_04";
 
 use IO::File;
 use Cwd;
@@ -377,8 +377,8 @@ sub _extract_file {
     }
     
     if( length $entry->type && $entry->is_file ) {
-        my $fh;
-        open $fh, '>' . $full or (
+        my $fh = new FileHandle;
+        $fh->open( '>' . $full ) or (
             $self->_error( qq[Could not open file '$full': $!] ),
             return undef
         );
@@ -475,7 +475,7 @@ sub list_files {
     if( @$aref == 0 or ( @$aref == 1 and $aref->[0] eq 'name' ) ) {
         return map { $_->name } @{$self->_data};     
     } else {
-        return map { my $o=$_; { map { $_ => $o->$_ } @$aref } } @{$self->_data};           
+        return map { my $o=$_; { map { $_ => $o->$_() } @$aref } } @{$self->_data};           
     }    
     
 }
@@ -739,17 +739,17 @@ sub _format_tar_entry {
                 PACK,
                 $file,
                 
-                (map { sprintf( $f1, $entry->$_ ) } qw[mode uid gid]),
-                (map { sprintf( $f2, $entry->$_ ) } qw[size mtime]),
+                (map { sprintf( $f1, $entry->$_() ) } qw[mode uid gid]),
+                (map { sprintf( $f2, $entry->$_() ) } qw[size mtime]),
                 
                 "",  # checksum filed - space padded a bit down 
                 
-                (map { $entry->$_ }                 qw[type linkname magic]),
+                (map { $entry->$_() }                 qw[type linkname magic]),
                 
                 $entry->version || '00',
                 
-                (map { $entry->$_ }                 qw[uname gname]),
-                (map { sprintf( $f1, $entry->$_ ) } qw[devmajor devminor]),
+                (map { $entry->$_() }                 qw[uname gname]),
+                (map { sprintf( $f1, $entry->$_() ) } qw[devmajor devminor]),
                 
                 $prefix
     );

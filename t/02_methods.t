@@ -1,6 +1,7 @@
-use Test::More tests => 69;
+use Test::More tests => 67;
 use strict;
 use File::Spec ();
+use FileHandle;
 use File::Path;
 use Archive::Tar;
 use File::Basename ();
@@ -151,7 +152,8 @@ for my $type( $archive, $compressed ) {
         
             ok( $expect->{$file},                                "   Expected file found" );
             
-            my $fh; open( $fh, "$file" ) or warn "Error opening file: $!\n";
+            my $fh = new FileHandle;
+            $fh->open( "$file" ) or warn "Error opening file: $!\n";
             ok( $fh,                                            "   Opening file" );
             like( scalar do{local $/;<$fh>}, $expect->{$file},  "   Contents OK" );
         }

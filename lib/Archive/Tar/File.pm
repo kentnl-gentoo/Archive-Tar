@@ -184,7 +184,7 @@ sub _new_from_chunk {
     
     $obj->type(FILE) if ( (!length $obj->type) or ($obj->type =~ /\W/) );
 
-    $obj->type(DIR) if ( ($obj->type == FILE) && ($obj->name =~ m|/$|) );    
+    $obj->type(DIR) if ( ($obj->is_file) && ($obj->name =~ m|/$|) );    
 
     ### weird thing in tarfiles -- if the file is actually a @LongLink,
     ### the data part seems to have a trailing ^@ (unprintable) char.
@@ -200,8 +200,8 @@ sub _new_from_file {
     my $class       = shift;
     my $path        = shift or return undef;
 
-    my $fh;
-    open $fh, "$path" or return undef;
+    my $fh = new FileHandle;
+    $fh->open("$path") or return undef;
     
     my ($prefix,$file) = $class->_prefix_and_file($path);
 
@@ -461,16 +461,17 @@ Returns true if the file type is C<unknown>
 
 =cut
 
-sub is_file     { FILE      == $_[0]->type }
-sub is_dir      { DIR       == $_[0]->type }
-sub is_hardlink { HARDLINK  == $_[0]->type }
-sub is_symlink  { SYMLINK   == $_[0]->type }
-sub is_chardev  { CHARDEV   == $_[0]->type }
-sub is_blockdev { BLOCKDEV  == $_[0]->type }
-sub is_fifo     { FIFO      == $_[0]->type }
-sub is_socket   { SOCKET    == $_[0]->type }
-sub is_unknown  { UNKNOWN   == $_[0]->type } 
-sub is_longlink { LONGLINK  eq $_[0]->type }
-sub is_label    { LABEL     eq $_[0]->type }
+#stupid perl5.5.3 needs to warn if it's not numeric 
+sub is_file     { local $^W;    FILE      == $_[0]->type }    
+sub is_dir      { local $^W;    DIR       == $_[0]->type }
+sub is_hardlink { local $^W;    HARDLINK  == $_[0]->type }
+sub is_symlink  { local $^W;    SYMLINK   == $_[0]->type }
+sub is_chardev  { local $^W;    CHARDEV   == $_[0]->type }
+sub is_blockdev { local $^W;    BLOCKDEV  == $_[0]->type }
+sub is_fifo     { local $^W;    FIFO      == $_[0]->type }
+sub is_socket   { local $^W;    SOCKET    == $_[0]->type }
+sub is_unknown  { local $^W;    UNKNOWN   == $_[0]->type } 
+sub is_longlink { local $^W;    LONGLINK  eq $_[0]->type }
+sub is_label    { local $^W;    LABEL     eq $_[0]->type }
 
 1;
