@@ -19,6 +19,12 @@ obviously can't.
 A snapshot of the latest development version of Archive::Tar may be 
 optained at: http://p4.elixus.org/snap/Archive-Tar.tar.gz
 
+* important changes in version 1.23 3/5/2005:
+-   Fix a bug where alternate absolute extract paths would add an
+    extra directory upon extract (bug #11342)
+-   Added support for 'perlio' (available for perl5.8 and up).
+    See the Archive::Tar documentation for details
+
 * important changes in version 1.22 21/11/2004:
 
 This release holds only bugfixes.

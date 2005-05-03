@@ -1,6 +1,7 @@
 use ExtUtils::MakeMaker;
 use strict;
 use Getopt::Std;
+use Config;
 my $opt = {};
 getopts( 'n', $opt );
 
@@ -22,8 +23,11 @@ my $prereqs = {
     'File::Spec'    => 0.82,
     'Test::Harness' => 2.26,    # bug in older versions
     'IO::Zlib'      => 1.01,    # the most recent, not modified since 2001
-    'IO::String'    => 0,       # for better 'return stringified archive'
 };
+
+unless ($Config{useperlio}) {
+    $prereqs->{'IO::String'} = 0;       # for better 'return stringified archive'
+}
 
 ### ok, you didn't want IO::Zlib ###
 delete $prereqs->{'IO::Zlib'} if $opt->{n};
