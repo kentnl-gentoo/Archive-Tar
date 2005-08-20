@@ -1,14 +1,17 @@
 README
 MANIFEST
+CHANGES
 Makefile.PL
 META.yml                                 Module meta-data (added by MakeMaker)
 bin/ptar
+bin/ptardiff
 lib/Archive/Tar.pm
 lib/Archive/Tar/Constant.pm
 lib/Archive/Tar/File.pm
 t/01_use.t
 t/02_methods.t
 t/03_file.t
+t/04_resolved_issues.t
 t/99_pod.t
 t/src/long/bar.tar
 t/src/long/foo.tgz

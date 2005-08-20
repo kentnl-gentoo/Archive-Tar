@@ -3,7 +3,7 @@ use strict;
 use Getopt::Std;
 use Config;
 my $opt = {};
-getopts( 'n', $opt );
+getopts( 'nd', $opt );
 
 my $have_zlib = eval { require IO::Zlib; 1 };
 
@@ -17,6 +17,14 @@ if( !$have_zlib and !$opt->{n} ) {
             qq[Note: you can disable this warning (and the prerequisite) ].
             qq[by invoking Makefile.PL with '-n'\n];
 }
+
+if( !$opt->{d} and not eval { require Text::Diff; 1 } ) {
+    print   qq[\nArchive::Tar comes with a utility called 'ptardiff' which ].
+            qq[lets you run diffs against tar archives.\n\nHowever, this ].
+            qq[utility requires you to have Text::Diff installed.\n\n].
+            qq[To add Text::Diff as a prerequisite, please supply the ].
+            qq['-d' option when invoking this Makefile.PL.\n\n];
+}            
 
 my $prereqs = {
     'Test::More'    => 0, 
@@ -32,6 +40,9 @@ unless ($Config{useperlio}) {
 ### ok, you didn't want IO::Zlib ###
 delete $prereqs->{'IO::Zlib'} if $opt->{n};
 
+### so you want text::diff ###
+$prereqs->{'Text::Diff'} = 0 if $opt->{d};
+    
 
 WriteMakefile (
     NAME            => 'Archive::Tar',
