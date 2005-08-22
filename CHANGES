@@ -1,3 +1,7 @@
+* important changes in version 1.26 22/8/2005:
+-   the 'ptardiff' was not included in the exe_files section
+    of the makefile.pl, meaning it didn't get instaleld by default.
+
 * important changes in version 1.25 20/8/2005:
 -   Move the changes into it's own file
 -   Add patch from abeltje to make tests pass on VMS. This is *just*

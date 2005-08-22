@@ -48,7 +48,7 @@ WriteMakefile (
     NAME            => 'Archive::Tar',
     VERSION_FROM    => 'lib/Archive/Tar.pm', # finds $VERSION
     dist            => { COMPRESS => 'gzip -9f', SUFFIX => 'gz' },
-    EXE_FILES       => ['bin/ptar'],
+    EXE_FILES       => ['bin/ptar', 'bin/ptardiff'],
     PREREQ_PM       => $prereqs,
     AUTHOR          => 'Jos Boumans <kane[at]cpan.org>',
 	ABSTRACT        => 'Manipulates TAR archives'
