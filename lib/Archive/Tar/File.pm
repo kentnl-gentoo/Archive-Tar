@@ -5,7 +5,6 @@ use IO::File;
 use File::Spec::Unix    ();
 use File::Spec          ();
 use File::Basename      ();
-use Data::Dumper;
 
 use Archive::Tar::Constant;
 

@@ -1,3 +1,19 @@
+* important changes in version 1.28 19/1/2006:
+-   add pod to ptar and ptardiff so they have manpages generated
+-   integrate change 25333 by rgs@oregon on 2005/08/27 16:28:27
+    which fixes a failure in Archive::Tar tests when perl is built
+    with -Dmksymlinks
+-   integrate Change 26870 by craigb@craigb-brianor on 
+    2006/01/17 04:03:01 holding vms specific patches
+-   mention 'full_name' as property type to list_archive
+-   address #14922 -- unable to reproduce, but add a test
+    case to make sure the issue doesn't occur
+-   apply the docpatch provided by:
+    #15935: File type constants are not documented
+-   document our lack of support for stringified archives and
+    compressed archives opened to a non-io-zlib fh
+-   1.27 was skipped due to PAUSE issues
+    
 * important changes in version 1.26 22/8/2005:
 -   the 'ptardiff' was not included in the exe_files section
     of the makefile.pl, meaning it didn't get instaleld by default.
