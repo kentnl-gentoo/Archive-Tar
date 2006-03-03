@@ -1,3 +1,17 @@
+* important changes in version 1.29 3/1/2006:
+-   integrate bleadperl patches to generate the source files for
+    testing, rather than bundling them
+-   make extract* methods accept a::t::file objects too    
+-   address #17624: Unnecessary calls to cwd() -- cwd() is only
+    called when needed
+-   address #17935: Archive::Tar::write('file_name') should close 
+    or return file handle. -- filehandles are now closed
+-   address #17395: [PATCH] allow extract() to select files by 
+    regexes or substrings; patch did not get integrated, but a FAQ
+    on how to achieve this was added to the FAQ section
+-   address #17310 (Archive-Tar 1.26_01 not tolerant to Archives 
+    with Garbage) -- Garbage protection should be much improved now   
+
 * important changes in version 1.28 19/1/2006:
 -   add pod to ptar and ptardiff so they have manpages generated
 -   integrate change 25333 by rgs@oregon on 2005/08/27 16:28:27
