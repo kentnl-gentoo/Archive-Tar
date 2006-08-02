@@ -1,3 +1,17 @@
+* important changes in version 1.30 8/2/2006:
+-   applied bleadperl patch: Subject: Change 27416: 
+    Cleanup Archive-Tar temporary test files
+-   address #17985: INSTALLDIRS needs to be 'perl' for >= perl-5.9.3
+-   address #18296: Archive::Tar 1.29 PATCH for VMS to fix test case 
+    failure in 99_pod.t
+    (it's actually a File::Find bug, but this patch works around that)
+-   address: #18720 ([PATCH] Archive::Tar creates POSIX style tar files
+    unnecessarily and by default, leading to compatibility problems 
+    particularly with WinZip.)
+    patch rejected, docpatch added with FAQ and SEE ALSO
+-   apply performance patch from #20399 to enable the user to
+    avoid repeated calls to cwd() if desired.
+
 * important changes in version 1.29 3/1/2006:
 -   integrate bleadperl patches to generate the source files for
     testing, rather than bundling them

@@ -50,6 +50,7 @@ WriteMakefile (
     dist            => { COMPRESS => 'gzip -9f', SUFFIX => 'gz' },
     EXE_FILES       => ['bin/ptar', 'bin/ptardiff'],
     PREREQ_PM       => $prereqs,
+    INSTALLDIRS     => ( $] >= 5.009003 ? 'perl' : 'site' ),
     AUTHOR          => 'Jos Boumans <kane[at]cpan.org>',
 	ABSTRACT        => 'Manipulates TAR archives'
 );             
