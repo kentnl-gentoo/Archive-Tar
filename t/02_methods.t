@@ -65,8 +65,11 @@ my $TOO_LONG    =   ($^O eq 'MSWin32' or $^O eq 'cygwin' or $^O eq 'VMS')
                     && length( cwd(). $LONG_FILE ) > 247;
 
 ### warn if we are going to skip long file names
-$TOO_LONG ? diag("No long filename support - long filename extraction disabled")
-          : ( push @EXPECT_NORMAL, [ [], $LONG_FILE, qr/^hello\s*$/] ) ;
+if ($TOO_LONG) {
+    diag("No long filename support - long filename extraction disabled") if ! $ENV{PERL_CORE};
+} else {
+    push @EXPECT_NORMAL, [ [], $LONG_FILE, qr/^hello\s*$/];
+}
 
 my @ROOT        = grep { length }   'src', $TOO_LONG ? 'short' : 'long';
 
@@ -131,6 +134,18 @@ chmod 0644, $COMPRESS_FILE;
     ### check if ->error eq $error
     is( $tar->error, $Archive::Tar::error,
                                     '$error matches error() method' );
+                     
+    ### check that 'contains_file' doesn't warn about missing files.                     
+    {   ### turn on warnings in general!
+        local $Archive::Tar::WARN  = 1;
+
+        my $warnings = '';
+        local $SIG{__WARN__} = sub { $warnings .= "@_" };
+        
+        my $rv = $tar->contains_file( $$ );
+        ok( !$rv,                   "Does not contain file '$$'" );
+        is( $warnings, '',          "   No warnings issued during lookup" );
+    }        
 }
 
 ### read tests ###
