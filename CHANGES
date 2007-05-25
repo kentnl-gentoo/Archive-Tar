@@ -1,3 +1,9 @@
+* important changes in version 1.32 24/5/2007:
+-   Make Archive::Tar work nicely with perls compiled with 
+    -Dmksymlinks. This also fixes an issue introduced in 
+    1.31 where symlinks weren't dereferenced in all cases.
+-   Quell warnings when a gid is not resolvable to a group name  
+
 * important changes in version 1.31 18/5/2007:
 -   No longer use the t/setup.t and t/cleanup.t files but just bundle 
     the binary files; this was done for core integration, but the new 
