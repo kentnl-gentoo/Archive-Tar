@@ -16,7 +16,7 @@ use vars qw[$DEBUG $error $VERSION $WARN $FOLLOW_SYMLINK $CHOWN $CHMOD
 $DEBUG                  = 0;
 $WARN                   = 1;
 $FOLLOW_SYMLINK         = 0;
-$VERSION                = "1.38";
+$VERSION                = "1.39_01";
 $CHOWN                  = 1;
 $CHMOD                  = 1;
 $DO_NOT_USE_PREFIX      = 0;
@@ -153,12 +153,18 @@ all options are case-sensitive.
 Do not read more than C<limit> files. This is useful if you have
 very big archives, and are only interested in the first few files.
 
+=item filter
+
+Can be set to a regular expression.  Only files with names that match
+the expression will be read.
+
 =item extract
 
 If set to true, immediately extract entries when reading them. This
 gives you the same memory break as the C<extract_archive> function.
 Note however that entries will not be read into memory, but written
-straight to disk.
+straight to disk. This means no C<Archive::Tar::File> objects are 
+created for you to inspect.
 
 =back
 
@@ -237,6 +243,7 @@ sub _read_tar {
     my $opts    = shift || {};
 
     my $count   = $opts->{limit}    || 0;
+    my $filter  = $opts->{filter};
     my $extract = $opts->{extract}  || 0;
 
     ### set a cap on the amount of files to extract ###
@@ -370,6 +377,10 @@ sub _read_tar {
             $entry->name( $$real_name );
             $entry->prefix('');
             undef $real_name;
+        }
+
+        if ($filter && $entry->name !~ $filter) {
+            next LOOP;
         }
 
         $self->_extract_file( $entry ) if $extract
@@ -561,26 +572,61 @@ sub _extract_file {
 
     ### it's a relative path ###
     } else {
-        my $cwd     = (defined $self->{cwd} ? $self->{cwd} : cwd());
+        my $cwd     = (ref $self and defined $self->{cwd}) 
+                        ? $self->{cwd} 
+                        : cwd();
 
         my @dirs = defined $alt
             ? File::Spec->splitdir( $dirs )         # It's a local-OS path
             : File::Spec::Unix->splitdir( $dirs );  # it's UNIX-style, likely
                                                     # straight from the tarball
 
-        ### paths that leave the current directory are not allowed under
-        ### strict mode, so only allow it if a user tells us to do this.
         if( not defined $alt            and 
-            not $INSECURE_EXTRACT_MODE  and 
-            grep { $_ eq '..' } @dirs
-        ) {
-            $self->_error(
-                q[Entry ']. $entry->full_path .q[' is attempting to leave the ].
-                q[current working directory. Not extracting under SECURE ].
-                q[EXTRACT MODE]
-            );
-            return;
-        }            
+            not $INSECURE_EXTRACT_MODE 
+        ) {            
+
+            ### paths that leave the current directory are not allowed under
+            ### strict mode, so only allow it if a user tells us to do this.
+            if( grep { $_ eq '..' } @dirs ) {
+    
+                $self->_error(
+                    q[Entry ']. $entry->full_path .q[' is attempting to leave ].
+                    q[the current working directory. Not extracting under ].
+                    q[SECURE EXTRACT MODE]
+                );
+                return;
+            } 
+        
+            ### the archive may be asking us to extract into a symlink. This
+            ### is not sane and a possible security issue, as outlined here:
+            ### https://rt.cpan.org/Ticket/Display.html?id=30380
+            ### https://bugzilla.redhat.com/show_bug.cgi?id=295021
+            ### https://issues.rpath.com/browse/RPL-1716
+            my $full_path = $cwd;
+            for my $d ( @dirs ) {
+                $full_path = File::Spec->catdir( $full_path, $d );
+                
+                ### we've already checked this one, and it's safe. Move on.
+                next if ref $self and $self->{_link_cache}->{$full_path};
+
+                if( -l $full_path ) {
+                    my $to   = readlink $full_path;
+                    my $diag = "symlinked directory ($full_path => $to)";
+
+                    $self->_error(
+                        q[Entry ']. $entry->full_path .q[' is attempting to ].
+                        qq[extract to a $diag. This is considered a security ].
+                        q[vulnerability and not allowed under SECURE EXTRACT ].
+                        q[MODE]
+                    );
+                    return;
+                }
+                
+                ### XXX keep a cache if possible, so the stats become cheaper:
+                $self->{_link_cache}->{$full_path} = 1 if ref $self;
+            }
+        }
+
         
         ### '.' is the directory delimiter, of which the first one has to
         ### be escaped/changed.
@@ -622,7 +668,8 @@ sub _extract_file {
     unless ( -d _ ) {
         eval { File::Path::mkpath( $dir, 0, 0777 ) };
         if( $@ ) {
-            $self->_error( qq[Could not create directory '$dir': $@] );
+            my $fp = $entry->full_path;
+            $self->_error(qq[Could not create directory '$dir' for '$fp': $@]);
             return;
         }
         
@@ -672,8 +719,13 @@ sub _extract_file {
         $self->_make_special_file( $entry, $full ) or return;
     }
 
-    utime time, $entry->mtime - TIME_OFFSET, $full or
-        $self->_error( qq[Could not update timestamp] );
+    ### only update the timestamp if it's not a symlink; that will change the
+    ### timestamp of the original. This addresses bug #33669: Could not update
+    ### timestamp warning on symlinks
+    if( not -l $full ) {
+        utime time, $entry->mtime - TIME_OFFSET, $full or
+            $self->_error( qq[Could not update timestamp] );
+    }
 
     if( $CHOWN && CAN_CHOWN ) {
         chown $entry->uid, $entry->gid, $full or
@@ -707,8 +759,8 @@ sub _make_special_file {
                 or $fail++;
         }
 
-        $err =  qq[Making symbolink link from '] . $entry->linkname .
-                qq[' to '$file' failed] if $fail;
+        $err =  qq[Making symbolic link '$file' to '] .
+                $entry->linkname .q[' failed] if $fail;
 
     } elsif ( $entry->is_hardlink ) {
         my $fail;
@@ -1431,6 +1483,65 @@ sub create_archive {
     return $tar->write( $file, $gzip );
 }
 
+=head2 Archive::Tar->iter( $filename, [ $compressed, {opt => $val} ] )
+=head2 Archive::Tar->iterator( $filename, [ $compressed, {opt => $val} ] )
+
+Returns an iterator function that reads the tar file without loading
+it all in memory.  Each time the function is called it will return the
+next file in the tarball. The files are returned as
+C<Archive::Tar::File> objects. The iterator function returns the
+empty list once it has exhausted the the files contained.
+
+The second argument can be a hash reference with options, which are
+identical to the arguments passed to C<read()>.
+
+Example usage:
+
+    my $next = Archive::Tar->iter( "example.tar.gz", 1, {filter => qr/\.pm$/} );
+
+    while( my $f = $next->() ) {
+        print $f->name, "\n";
+
+        $f->extract or warn "Extraction failed";
+        
+        # ....
+    }
+
+=cut
+
+### alias
+*iterator = *iter;
+
+sub iter {
+    my $class       = shift;
+    my $filename    = shift or return;
+    my $compressed  = shift or 0;
+    my $opts        = shift || {};
+
+    ### get a handle to read from.
+    my $handle = $class->_get_handle(
+        $filename, 
+        $compressed, 
+        READ_ONLY->( ZLIB )
+    ) or return;
+
+    my @data;
+    return sub {
+        return shift(@data)     if @data;       # more than one file returned?
+        return                  unless $handle; # handle exhausted?
+
+        ### read data, should only return file
+        @data = @{ $class->_read_tar($handle, { %$opts, limit => 1 }) };
+
+        ### return one piece of data
+        return shift(@data)     if @data;
+        
+        ### data is exhausted, free the filehandle
+        undef $handle;
+        return;
+    };
+}
+
 =head2 Archive::Tar->list_archive ($file, $compressed, [\@properties])
 
 Returns a list of the names of all the files in the archive.  The
@@ -1852,8 +1963,8 @@ Please reports bugs to E<lt>bug-archive-tar@rt.cpan.orgE<gt>.
 
 =head1 ACKNOWLEDGEMENTS
 
-Thanks to Sean Burke, Chris Nandor, Chip Salzenberg, Tim Heaney and
-especially Andrew Savige for their help and suggestions.
+Thanks to Sean Burke, Chris Nandor, Chip Salzenberg, Tim Heaney, Gisle Aas
+and especially Andrew Savige for their help and suggestions.
 
 =head1 COPYRIGHT
 
