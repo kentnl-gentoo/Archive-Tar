@@ -1,12 +1,15 @@
 # http://module-build.sourceforge.net/META-spec.html
 #XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
 name:         Archive-Tar
-version:      1.39_02
+version:      1.39_03
 version_from: lib/Archive/Tar.pm
 installdirs:  site
 requires:
+    Compress::Zlib:                2.012
     File::Spec:                    0.82
+    IO::Compress::Base:            2.012
     IO::Compress::Bzip2:           2.012
+    IO::Compress::Gzip:            2.012
     IO::Zlib:                      1.01
     Package::Constants:            0
     Test::Harness:                 2.26
