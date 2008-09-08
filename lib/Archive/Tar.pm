@@ -31,7 +31,7 @@ use vars qw[$DEBUG $error $VERSION $WARN $FOLLOW_SYMLINK $CHOWN $CHMOD
 $DEBUG                  = 0;
 $WARN                   = 1;
 $FOLLOW_SYMLINK         = 0;
-$VERSION                = "1.39_03";
+$VERSION                = "1.39_04";
 $CHOWN                  = 1;
 $CHMOD                  = 1;
 $DO_NOT_USE_PREFIX      = 0;
@@ -434,10 +434,17 @@ sub _read_tar {
             undef $real_name;
         }
 
+        ### skip this entry if we're filtering
         if ($filter && $entry->name !~ $filter) {
             next LOOP;
+        
+        ### skip this entry if it's a pax header. This is a special file added
+        ### by, among others, git-generated tarballs. It holds comments and is
+        ### not meant for extracting. See #38932: pax_global_header extracted 
+        } elsif ( $entry->name eq PAX_HEADER ) {
+            next LOOP;
         }
-
+        
         $self->_extract_file( $entry ) if $extract
                                             && !$entry->is_longlink
                                             && !$entry->is_unknown
@@ -610,7 +617,7 @@ sub _extract_file {
 
     my $dir;
     ### is $name an absolute path? ###
-    if( File::Spec->file_name_is_absolute( $dirs ) ) {
+    if( $vol || File::Spec->file_name_is_absolute( $dirs ) ) {
 
         ### absolute names are not allowed to be in tarballs under
         ### strict mode, so only allow it if a user tells us to do it
@@ -623,7 +630,7 @@ sub _extract_file {
         }
         
         ### user asked us to, it's fine.
-        $dir = $dirs;
+        $dir = File::Spec->catpath( $vol, $dirs, "" );
 
     ### it's a relative path ###
     } else {
