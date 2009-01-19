@@ -1,19 +1,28 @@
-# http://module-build.sourceforge.net/META-spec.html
-#XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
-name:         Archive-Tar
-version:      1.42
-version_from: lib/Archive/Tar.pm
-installdirs:  site
+--- #YAML:1.0
+name:               Archive-Tar
+version:            1.44
+abstract:           Manipulates TAR archives
+author:
+    - Jos Boumans <kane[at]cpan.org>
+license:            unknown
+distribution_type:  module
+configure_requires:
+    ExtUtils::MakeMaker:  0
 requires:
-    Compress::Zlib:                2.012
-    File::Spec:                    0.82
-    IO::Compress::Base:            2.012
-    IO::Compress::Bzip2:           2.012
-    IO::Compress::Gzip:            2.012
-    IO::Zlib:                      1.01
-    Package::Constants:            0
-    Test::Harness:                 2.26
-    Test::More:                    0
-
-distribution_type: module
-generated_by: ExtUtils::MakeMaker version 6.30
+    Compress::Zlib:       2.012
+    File::Spec:           0.82
+    IO::Compress::Base:   2.012
+    IO::Compress::Bzip2:  2.012
+    IO::Compress::Gzip:   2.012
+    IO::Zlib:             1.01
+    Package::Constants:   0
+    Test::Harness:        2.26
+    Test::More:           0
+no_index:
+    directory:
+        - t
+        - inc
+generated_by:       ExtUtils::MakeMaker version 6.48
+meta-spec:
+    url:      http://module-build.sourceforge.net/META-spec-v1.4.html
+    version:  1.4
