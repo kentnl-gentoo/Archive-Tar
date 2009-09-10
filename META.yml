@@ -1,22 +1,30 @@
 --- #YAML:1.0
-name:                Archive-Tar
-version:             1.52
-abstract:            Manipulates TAR archives
-license:             ~
-author:              
+name:               Archive-Tar
+version:            1.54
+abstract:           Manipulates TAR archives
+author:
     - Jos Boumans <kane[at]cpan.org>
-generated_by:        ExtUtils::MakeMaker version 6.42
-distribution_type:   module
-requires:     
-    Compress::Zlib:                2.015
-    File::Spec:                    0.82
-    IO::Compress::Base:            2.015
-    IO::Compress::Bzip2:           2.015
-    IO::Compress::Gzip:            2.015
-    IO::Zlib:                      1.01
-    Package::Constants:            0
-    Test::Harness:                 2.26
-    Test::More:                    0
+license:            perl
+distribution_type:  module
+configure_requires:
+    ExtUtils::MakeMaker:  0
+build_requires:
+    ExtUtils::MakeMaker:  0
+requires:
+    Compress::Zlib:       2.015
+    File::Spec:           0.82
+    IO::Compress::Base:   2.015
+    IO::Compress::Bzip2:  2.015
+    IO::Compress::Gzip:   2.015
+    IO::Zlib:             1.01
+    Package::Constants:   0
+    Test::Harness:        2.26
+    Test::More:           0
+no_index:
+    directory:
+        - t
+        - inc
+generated_by:       ExtUtils::MakeMaker version 6.54
 meta-spec:
-    url:     http://module-build.sourceforge.net/META-spec-v1.3.html
-    version: 1.3
+    url:      http://module-build.sourceforge.net/META-spec-v1.4.html
+    version:  1.4
