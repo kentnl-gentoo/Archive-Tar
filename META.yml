@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Archive-Tar
-version:            1.56
+version:            1.58
 abstract:           Manipulates TAR archives
 author:
     - Jos Boumans <kane[at]cpan.org>
