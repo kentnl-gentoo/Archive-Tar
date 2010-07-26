@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Archive-Tar
-version:            1.64
+version:            1.66
 abstract:           Manipulates TAR archives
 author:
     - Jos Boumans <kane[at]cpan.org>
@@ -18,8 +18,11 @@ requires:
     IO::Compress::Gzip:   2.015
     IO::Zlib:             1.01
     Package::Constants:   0
+    perl:                 5.00503
     Test::Harness:        2.26
     Test::More:           0
+resources:
+    repository:  http://oss.dwim.org/archive-tar-new
 no_index:
     directory:
         - t
