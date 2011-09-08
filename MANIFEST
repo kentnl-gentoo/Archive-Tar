@@ -27,4 +27,5 @@ t/src/short/b
 t/src/short/bar.tar
 t/src/short/foo.tbz
 t/src/short/foo.tgz
-META.yml                                 Module meta-data (added by MakeMaker)
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)
