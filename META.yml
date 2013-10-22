@@ -30,4 +30,4 @@ requires:
   perl: 5.00503
 resources:
   repository: https://github.com/jib/archive-tar-new
-version: 0.93_01
+version: 1.93_02
