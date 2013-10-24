@@ -38,7 +38,6 @@
             "IO::Compress::Bzip2" : "2.015",
             "IO::Compress::Gzip" : "2.015",
             "IO::Zlib" : "1.01",
-            "Package::Constants" : "0",
             "Test::Harness" : "2.26",
             "Test::More" : "0",
             "perl" : "5.00503"
@@ -51,5 +50,5 @@
          "url" : "https://github.com/jib/archive-tar-new"
       }
    },
-   "version" : "1.94"
+   "version" : "1.96"
 }
