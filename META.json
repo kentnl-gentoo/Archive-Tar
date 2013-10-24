@@ -45,11 +45,11 @@
          }
       }
    },
-   "release_status" : "testing",
+   "release_status" : "stable",
    "resources" : {
       "repository" : {
          "url" : "https://github.com/jib/archive-tar-new"
       }
    },
-   "version" : "1.93_02"
+   "version" : "1.94"
 }
