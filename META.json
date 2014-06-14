@@ -4,7 +4,7 @@
       "Jos Boumans <kane[at]cpan.org>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "ExtUtils::MakeMaker version 6.8, CPAN::Meta::Converter version 2.132830",
+   "generated_by" : "ExtUtils::MakeMaker version 6.98, CPAN::Meta::Converter version 2.141520",
    "license" : [
       "perl_5"
    ],
@@ -50,5 +50,5 @@
          "url" : "https://github.com/jib/archive-tar-new"
       }
    },
-   "version" : "1.96"
+   "version" : "1.98"
 }
