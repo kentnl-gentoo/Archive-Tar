@@ -1,5 +1,13 @@
 use strict;
 use warnings;
+
+BEGIN {
+  unless ( $ENV{GENTOO_TAR_PTARDIFF} ) {
+    print "1..0 # SKIP this test requires GENTOO_TAR_PTARDIFF set";
+    exit
+  }
+}
+
 use Test::More;
 
 use File::Spec;
@@ -14,8 +22,7 @@ my $tarfile = File::Spec->catfile("t", "ptardiff.tar");
 my $ptardiff = File::Spec->catfile($Bin, "..", "bin", "ptardiff");
 my $cmd = "$^X $ptardiff $tarfile";
 
-eval { require Text::Diff; };
-plan skip_all => 'Text::Diff required to test ptardiff' if $@;
+require Text::Diff;
 plan tests => 1;
 
 # create directory/files
